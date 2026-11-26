@@ -1,0 +1,70 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #eee; }
+body.hide-cursor, body.hide-cursor * { cursor: none !important; }
+
+#viewport { position: fixed; inset: 0; overflow: hidden; }
+/* La zone d'effets est dessinée à plat puis déformée par une homographie (matrix3d). */
+#stage { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; transform-origin: 0 0; }
+#canvas-host { position: absolute; inset: 0; }
+#canvas-host canvas { display: block; }
+#compensation { position: absolute; inset: 0; pointer-events: none; }
+
+#hint {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: rgba(20, 20, 24, 0.85); padding: 8px 14px; border-radius: 8px; font-size: 14px;
+  opacity: 0; transition: opacity 0.4s; pointer-events: none;
+}
+#hint.show { opacity: 1; }
+
+/* Panneau de réglages */
+#panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); overflow-y: auto;
+  background: rgba(16, 16, 20, 0.94); border-left: 1px solid #333; padding: 16px 18px 40px; font-size: 14px;
+}
+#panel h1 { font-size: 18px; margin: 0 0 8px; }
+#panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #9aa; margin: 20px 0 8px; }
+#panel .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0; }
+#panel .row .label { flex: 1; }
+#panel input[type='number'] { width: 80px; }
+#panel select, #panel input, #panel button { font: inherit; color: inherit; background: #23232a; border: 1px solid #444; border-radius: 6px; padding: 4px 8px; }
+#panel input[type='color'] { padding: 0; width: 44px; height: 28px; }
+#panel input[type='checkbox'] { width: 18px; height: 18px; }
+#panel .slider { display: flex; align-items: center; gap: 6px; }
+#panel .slider output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: #aaa; }
+#panel .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+#panel button { cursor: pointer; }
+#panel button:hover { background: #2f2f38; }
+#panel button.primary, .calib-toolbar button.primary { background: #2563eb; border-color: #2563eb; }
+#panel button.active { background: #b45309; border-color: #b45309; }
+#panel .hint { color: #999; font-size: 12.5px; }
+#panel .status { padding: 6px 8px; border-radius: 6px; background: #23232a; }
+#panel .status.ok { background: #14532d; }
+#panel .status.bad { background: #7f1d1d; }
+#panel .activity { font-variant-numeric: tabular-nums; color: #ccc; }
+
+/* Calibrage */
+#calibration-overlay { position: fixed; inset: 0; pointer-events: none; }
+#calibration-overlay[hidden] { display: none; }
+.calib-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.calib-svg polygon { fill: none; stroke: #ffd24a; stroke-width: 2; stroke-dasharray: 8 6; }
+.calib-handle {
+  position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%;
+  background: rgba(255, 210, 74, 0.25); border: 2px solid #ffd24a; color: #ffd24a;
+  display: grid; place-items: center; font-weight: 700; cursor: grab; pointer-events: auto; touch-action: none;
+}
+.calib-handle.selected { background: #ffd24a; color: #000; }
+.calib-handle[hidden] { display: none; }
+.calib-toolbar {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: auto;
+}
+.calib-toolbar button { font: inherit; font-size: 14px; color: #fff; background: #23232a; border: 1px solid #555; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.calib-toolbar button.active { background: #ffd24a; color: #000; border-color: #ffd24a; }
+.calib-info {
+  position: absolute; left: 50%; top: 64px; transform: translateX(-50%); max-width: min(760px, 92vw);
+  background: rgba(16, 16, 20, 0.9); border: 1px solid #444; border-radius: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.5;
+}
+kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 5px; font-size: 12px; }

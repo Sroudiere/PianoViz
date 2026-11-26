@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PianoViz</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='1' y='9' width='3' height='6' fill='%233fd0ff'/><rect x='6' y='3' width='3' height='12' fill='%23ff7a3d'/><rect x='11' y='6' width='3' height='9' fill='%233fd0ff'/></svg>" />
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <div id="viewport">
+      <div id="stage">
+        <div id="canvas-host"></div>
+        <div id="compensation"></div>
+      </div>
+    </div>
+    <div id="calibration-overlay" hidden></div>
+    <div id="hint"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
