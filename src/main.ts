@@ -77,6 +77,12 @@ async function main(): Promise<void> {
       overlay.render();
       save();
     },
+    stepChanged: (step) => {
+      if (step === 'keys') return;
+      panel.toggle(true);
+      panel.focusSection(step === 'keyboard' ? 'clavier' : 'calibrage');
+    },
+    togglePanel: () => panel.toggle(),
     exit: () => closeCalibration(),
   });
 
@@ -94,11 +100,11 @@ async function main(): Promise<void> {
     if (overlay.active) return;
     patternBeforeCalib = renderer.patternVisible;
     renderer.showPattern(true);
-    panel.toggle(false);
     overlay.open();
   };
   const closeCalibration = () => {
     overlay.close();
+    panel.toggle(false);
     renderer.showPattern(patternBeforeCalib);
     renderer.highlight(null);
   };
@@ -189,7 +195,7 @@ async function main(): Promise<void> {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
-      if (!overlay.active) panel.toggle();
+      panel.toggle();
     } else if (e.key === 'F2') {
       e.preventDefault();
       if (overlay.active) closeCalibration();
