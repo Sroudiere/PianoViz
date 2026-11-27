@@ -1,7 +1,7 @@
 import type { CalibrationProfile } from '../config/settings';
 import type { Point } from './homography';
 
-export type CalibrationStep = 'corners' | 'keys';
+export type CalibrationStep = 'keyboard' | 'corners' | 'keys';
 
 export interface CalibrationCallbacks {
   /** Le profil a changé (coins ou corrections) : réappliquer et sauvegarder. */
@@ -11,6 +11,9 @@ export interface CalibrationCallbacks {
   /** Supprimer la correction de la dernière touche jouée. */
   removeKey(): void;
   resetCorners(): void;
+  /** Changement d'étape : l'appli ouvre la bonne section du panneau. */
+  stepChanged(step: CalibrationStep): void;
+  togglePanel(): void;
   exit(): void;
 }
 
@@ -22,7 +25,7 @@ const CORNER_NAMES = ['haut gauche', 'haut droit', 'bas droit', 'bas gauche'];
  * Étape « Touches » : jouer une touche, puis ← → pour aligner sa colonne sur la vraie touche.
  */
 export class CalibrationOverlay {
-  private step: CalibrationStep = 'corners';
+  private step: CalibrationStep = 'keyboard';
   private selected = 0;
   private handles: HTMLDivElement[] = [];
   private outline: SVGPolygonElement;
@@ -65,22 +68,29 @@ export class CalibrationOverlay {
     this.toolbar = document.createElement('div');
     this.toolbar.className = 'calib-toolbar';
     this.toolbar.innerHTML = `
-      <button data-step="corners">1. Coins</button>
-      <button data-step="keys">2. Touches</button>
-      <button data-act="reset">Réinitialiser les coins</button>
+      <button data-step="keyboard">1. Clavier et visuels</button>
+      <button data-step="corners">2. Coins</button>
+      <button data-step="keys">3. Touches</button>
+      <button data-act="panel">Réglages</button>
+      <button data-act="reset">Réinit. coins</button>
       <button data-act="exit" class="primary">Terminer</button>`;
     this.toolbar.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest('button');
       if (!b) return;
       if (b.dataset.step) this.setStep(b.dataset.step as CalibrationStep);
       if (b.dataset.act === 'reset') this.cb.resetCorners();
+      if (b.dataset.act === 'panel') this.cb.togglePanel();
       if (b.dataset.act === 'exit') this.cb.exit();
     });
-    root.appendChild(this.toolbar);
+    // Barre et aide empilées dans un même bloc : l'aide reste sous la barre même si celle-ci passe sur deux lignes.
+    const top = document.createElement('div');
+    top.className = 'calib-top';
+    top.appendChild(this.toolbar);
 
     this.info = document.createElement('div');
     this.info.className = 'calib-info';
-    root.appendChild(this.info);
+    top.appendChild(this.info);
+    root.appendChild(top);
 
     window.addEventListener('keydown', this.onKey, true);
     window.addEventListener('resize', () => this.active && this.render());
@@ -89,7 +99,7 @@ export class CalibrationOverlay {
   open(): void {
     this.active = true;
     this.root.hidden = false;
-    this.render();
+    this.setStep(this.step);
   }
 
   close(): void {
@@ -100,6 +110,7 @@ export class CalibrationOverlay {
   setStep(step: CalibrationStep): void {
     this.step = step;
     this.render();
+    this.cb.stepChanged(step);
   }
 
   get currentStep(): CalibrationStep {
@@ -126,6 +137,7 @@ export class CalibrationOverlay {
       e.preventDefault();
       return this.cb.exit();
     }
+    if (this.step === 'keyboard') return;
     if (this.step === 'corners') {
       if (['1', '2', '3', '4'].includes(e.key)) {
         this.selected = Number(e.key) - 1;
@@ -171,7 +183,11 @@ export class CalibrationOverlay {
     for (const b of this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-step]')) {
       b.classList.toggle('active', b.dataset.step === this.step);
     }
-    if (this.step === 'corners') {
+    this.toolbar.querySelector<HTMLButtonElement>('button[data-act="reset"]')!.hidden = this.step !== 'corners';
+    if (this.step === 'keyboard') {
+      this.info.innerHTML = `<b>Clavier et visuels</b> : dans le panneau, choisis le nombre de touches (ou « Apprendre »),
+        puis les effets et les couleurs. Joue quelques notes (ou la démo) pour voir le résultat sur le mur, puis passe aux coins.`;
+    } else if (this.step === 'corners') {
       this.info.innerHTML = `<b>Coins</b> : glisse chaque poignée sur le mur. Bas gauche et bas droit à l'aplomb des bords du clavier,
         vus depuis le tabouret ; haut gauche et haut droit en haut de la zone d'effets.<br>
         Clavier : <kbd>1</kbd>–<kbd>4</kbd> choisit le coin (${CORNER_NAMES[this.selected]}), flèches pour 1 px, <kbd>Maj</kbd> + flèches pour 10 px.`;

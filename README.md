@@ -26,7 +26,7 @@ Branche le piano en USB avant ou après le lancement : il est détecté à chaud
 
 | Touche | Action |
 | --- | --- |
-| Tab | Ouvrir ou fermer le panneau de réglages |
+| Tab | Ouvrir ou fermer le panneau de réglages (aussi pendant le calibrage) |
 | F2 | Calibrage (Échap pour quitter) |
 | F3 | Afficher la mire |
 | F4 | Démo automatique |
@@ -35,9 +35,11 @@ Branche le piano en USB avant ou après le lancement : il est détecté à chaud
 
 ## Calibrage
 
-1. **Clavier** (panneau, section Clavier) : choisis 61, 76 ou 88 touches, ou clique « Apprendre » puis joue la touche la plus grave et la plus aiguë.
-2. **Coins** (F2, étape 1) : fais glisser les 4 poignées sur le mur. Bas gauche et bas droit à l'aplomb des bords du clavier, vus depuis le tabouret ; haut gauche et haut droit en haut de la zone d'effets. Touches `1`–`4` pour choisir un coin, flèches pour 1 px, Maj + flèches pour 10 px.
-3. **Touches** (F2, étape 2) : assis au tabouret, joue une touche ; si sa colonne n'est pas pile au-dessus, `←` `→` la décale. Deux ou trois points (gauche, milieu, droite) suffisent ; la correction est interpolée entre eux.
+F2 ouvre le calibrage, avec le panneau de réglages à côté : tout se règle au même endroit pendant que la mire et les effets restent visibles sur le mur. Le bouton ⇄ du panneau le passe à gauche ou à droite pour dégager les coins qu'on règle.
+
+1. **Clavier et visuels** : choisis 61, 76 ou 88 touches, ou clique « Apprendre » puis joue la touche la plus grave et la plus aiguë. Règle ensuite les effets et les couleurs en jouant quelques notes (ou F4 pour la démo).
+2. **Coins** : fais glisser les 4 poignées sur le mur. Bas gauche et bas droit à l'aplomb des bords du clavier, vus depuis le tabouret ; haut gauche et haut droit en haut de la zone d'effets. Touches `1`–`4` pour choisir un coin, flèches pour 1 px, Maj + flèches pour 10 px.
+3. **Touches** : assis au tabouret, joue une touche ; si sa colonne n'est pas pile au-dessus, `←` `→` la décale. Deux ou trois points (gauche, milieu, droite) suffisent ; la correction est interpolée entre eux.
 
 Les réglages sont enregistrés dans le navigateur. Chaque lieu peut avoir son profil (« Nouveau profil »), et « Exporter » / « Importer » sauvegardent tout en JSON. Le panneau propose aussi miroir horizontal et vertical, et une compensation de luminosité gauche ↔ droite pour un projecteur en biais.
 

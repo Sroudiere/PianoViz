@@ -25,6 +25,13 @@ body.hide-cursor, body.hide-cursor * { cursor: none !important; }
   position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); overflow-y: auto;
   background: rgba(16, 16, 20, 0.94); border-left: 1px solid #333; padding: 16px 18px 40px; font-size: 14px;
 }
+body.panel-left #panel { right: auto; left: 0; border-left: 0; border-right: 1px solid #333; }
+#panel header { display: flex; align-items: center; gap: 6px; }
+#panel header h1 { flex: 1; }
+#panel button.side { padding: 2px 10px; }
+#panel section { border-radius: 8px; padding: 0 6px; margin: 0 -6px; transition: background 0.6s; }
+#panel section.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: rgba(255, 210, 74, 0.22); } to { background: transparent; } }
 #panel h1 { font-size: 18px; margin: 0 0 8px; }
 #panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #9aa; margin: 20px 0 8px; }
 #panel .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0; }
@@ -58,13 +65,18 @@ body.hide-cursor, body.hide-cursor * { cursor: none !important; }
 }
 .calib-handle.selected { background: #ffd24a; color: #000; }
 .calib-handle[hidden] { display: none; }
-.calib-toolbar {
-  position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: auto;
+/* Barre et aide du calibrage, recentrées dans l'espace laissé libre par le panneau. */
+.calib-top {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%); width: min(760px, 92vw);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
+body.panel-open .calib-top { left: calc(50% - min(210px, 50vw)); width: min(760px, calc(100vw - 460px)); }
+body.panel-open.panel-left .calib-top { left: calc(50% + min(210px, 50vw)); }
+.calib-toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; pointer-events: auto; }
+.calib-toolbar button[hidden] { display: none; }
 .calib-toolbar button { font: inherit; font-size: 14px; color: #fff; background: #23232a; border: 1px solid #555; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
 .calib-toolbar button.active { background: #ffd24a; color: #000; border-color: #ffd24a; }
 .calib-info {
-  position: absolute; left: 50%; top: 64px; transform: translateX(-50%); max-width: min(760px, 92vw);
   background: rgba(16, 16, 20, 0.9); border: 1px solid #444; border-radius: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.5;
 }
 kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 5px; font-size: 12px; }

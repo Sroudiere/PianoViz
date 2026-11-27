@@ -70,6 +70,27 @@ export class Panel {
 
   toggle(force?: boolean): void {
     this.el.hidden = force === undefined ? !this.el.hidden : !force;
+    document.body.classList.toggle('panel-open', !this.el.hidden);
+  }
+
+  /** Fait défiler le panneau jusqu'à une section et la met en avant brièvement. */
+  focusSection(id: 'entree' | 'clavier' | 'calibrage' | 'visuels'): void {
+    const sec = this.el.querySelector<HTMLElement>(`section[data-section="${id}"]`);
+    if (!sec) return;
+    sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    sec.classList.remove('flash');
+    void sec.offsetWidth;
+    sec.classList.add('flash');
+  }
+
+  /** Place le panneau à gauche ou à droite, pour ne pas cacher les coins qu'on règle. */
+  private setSide(left: boolean): void {
+    document.body.classList.toggle('panel-left', left);
+    try {
+      localStorage.setItem('pianoviz.panelSide', left ? 'left' : 'right');
+    } catch {
+      // sans importance
+    }
   }
 
   get visible(): boolean {
@@ -298,6 +319,23 @@ export class Panel {
       h('div', { className: 'buttons' }, fullBtn),
     );
 
-    this.el.append(h('h1', {}, 'PianoViz'), entree, clavier, calibrage, visuels, aide);
+    entree.dataset.section = 'entree';
+    clavier.dataset.section = 'clavier';
+    calibrage.dataset.section = 'calibrage';
+    visuels.dataset.section = 'visuels';
+
+    const sideBtn = h('button', { type: 'button', title: 'Changer de côté', className: 'side' }, '⇄');
+    sideBtn.addEventListener('click', () => this.setSide(!document.body.classList.contains('panel-left')));
+    const closeBtn = h('button', { type: 'button', title: 'Fermer (Tab)', className: 'side' }, '×');
+    closeBtn.addEventListener('click', () => this.toggle(false));
+    let left = false;
+    try {
+      left = localStorage.getItem('pianoviz.panelSide') === 'left';
+    } catch {
+      // sans importance
+    }
+    this.setSide(left);
+
+    this.el.append(h('header', {}, h('h1', {}, 'PianoViz'), sideBtn, closeBtn), entree, clavier, calibrage, visuels, aide);
   }
 }
