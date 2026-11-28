@@ -4,6 +4,7 @@ import { resolve } from './colors';
 import type { FrameContext, NoteSprite } from './frame';
 
 interface Bar {
+  id: number;
   note: number;
   color: number;
   velocity: number;
@@ -46,6 +47,7 @@ export class NoteField {
   private bars: Bar[] = [];
   private held = new Map<number, Bar>();
   private gradients = new Map<string, FillGradient>();
+  private nextId = 0;
   readonly sprites: NoteSprite[] = [];
 
   constructor() {
@@ -60,7 +62,7 @@ export class NoteField {
     const prev = this.held.get(note);
     if (prev?.fixed) return;
     if (prev) prev.held = false;
-    const bar: Bar = { note, color, velocity, bottom: 0, top: 0, held: true, fixed: false, detached: false };
+    const bar: Bar = { id: ++this.nextId, note, color, velocity, bottom: 0, top: 0, held: true, fixed: false, detached: false };
     this.bars.push(bar);
     this.held.set(note, bar);
   }
@@ -76,7 +78,7 @@ export class NoteField {
   setStatic(note: number | null, color = 0xffffff): void {
     this.clear();
     if (note === null) return;
-    const bar: Bar = { note, color, velocity: 1, bottom: 0.28, top: 0.74, held: true, fixed: true, detached: true };
+    const bar: Bar = { id: ++this.nextId, note, color, velocity: 1, bottom: 0.28, top: 0.74, held: true, fixed: true, detached: true };
     this.bars.push(bar);
     this.held.set(note, bar);
   }
@@ -147,7 +149,7 @@ export class NoteField {
       const r = ns.shape === 'capsule' ? w / 2 : ns.shape === 'rect' ? 0 : ns.radius * (w / 2);
       const h = b.detached ? Math.max(visible, 1) : Math.max(visible, 2 * r + 2);
       const fade = b.fixed || ns.fadeTop <= 0 ? 1 : Math.max(0, Math.min(1, (1 - b.bottom) / (ns.fadeTop * 0.9 + 0.05)));
-      this.sprites.push({ note: b.note, color: b.color, velocity: b.velocity, cx: key.cx * W, w, yTop: y, yBottom, held: b.held, fixed: b.fixed, alpha: fade });
+      this.sprites.push({ id: b.id, note: b.note, color: b.color, velocity: b.velocity, cx: key.cx * W, w, yTop: y, yBottom, held: b.held, fixed: b.fixed, alpha: fade });
       if (!ns.enabled || fade <= 0) continue;
 
       // Halo : la forme (ou son contour pour un néon sans remplissage), floutée.

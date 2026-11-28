@@ -61,7 +61,8 @@ export class ParticleSystem {
     dynamicProperties: { position: true, rotation: true, vertex: true, color: true },
   });
   private parts: P[] = [];
-  private acc = new Map<string, number>();
+  /** Reste fractionnaire d'émission par note en vol : à faible débit, aucune particule n'est perdue. */
+  private acc = new Map<number, number>();
 
   constructor() {
     atlas ??= buildAtlas();
@@ -111,12 +112,11 @@ export class ParticleSystem {
         if (n.alpha <= 0.05) continue;
         const fromKey = n.held && (p.source === 'key' || p.source === 'both');
         const fromNote = n.fixed || p.source === 'note' || p.source === 'both';
-        const key = `${n.note}:${Math.round(n.yBottom)}`;
-        let budget = this.acc.get(key) ?? 0;
+        let budget = this.acc.get(n.id) ?? 0;
         if (fromKey) budget += p.rate * dt;
         if (fromNote) budget += p.rate * dt * 0.8;
         const count = Math.floor(budget);
-        this.acc.set(key, budget - count);
+        this.acc.set(n.id, budget - count);
         for (let i = 0; i < count; i++) {
           const useKey = fromKey && (!fromNote || Math.random() < 0.5);
           if (useKey) this.spawn(n.cx + (Math.random() - 0.5) * keyW(n.note), H, n.color, 1, ctx);
@@ -127,7 +127,11 @@ export class ParticleSystem {
           }
         }
       }
-      if (this.acc.size > 512) this.acc.clear();
+      // On oublie les notes disparues.
+      if (this.acc.size > notes.length) {
+        const live = new Set(notes.map((n) => n.id));
+        for (const id of this.acc.keys()) if (!live.has(id)) this.acc.delete(id);
+      }
     }
 
     const g = p.gravity * H;

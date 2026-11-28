@@ -40,6 +40,7 @@ export class Renderer {
   private time = 0;
   private staticNote: number | null = null;
   maxParticles = 2500;
+  private running = true;
   /** Notes enfoncées et leur couleur, pour éclairer le faux piano. */
   private pressed = new Map<number, number>();
   private readonly pianoHeight: number;
@@ -78,10 +79,6 @@ export class Renderer {
     this.app.renderer.on('resize', () => (this.patternDirty = true));
     bus.on((e) => this.handle(e));
     this.app.ticker.add((t) => this.frame(Math.min(t.deltaMS / 1000, 0.1)));
-  }
-
-  get ready(): boolean {
-    return Boolean(this.app.renderer);
   }
 
   /** Taille de la zone d'effets en pixels CSS (le faux piano est en dessous). */
@@ -123,9 +120,29 @@ export class Renderer {
     }
   }
 
+  /**
+   * Met en pause ou relance le rendu. En pause, les notes reçues sont ignorées
+   * (sinon elles s'accumuleraient et partiraient toutes d'un coup à la reprise).
+   */
   setRunning(on: boolean): void {
+    if (!this.app.ticker) return;
+    if (on === this.running) return;
+    this.running = on;
     if (on) this.app.ticker.start();
-    else this.app.ticker.stop();
+    else {
+      this.app.ticker.stop();
+      this.clearAll();
+    }
+  }
+
+  private clearAll(): void {
+    this.notes.clear();
+    this.particles.clear();
+    this.keyGlow.clear();
+    this.impact.clear();
+    this.keyLine.clear();
+    this.pressed.clear();
+    if (this.staticNote !== null) this.setStatic(this.staticNote);
   }
 
   showPattern(on: boolean): void {
@@ -155,7 +172,7 @@ export class Renderer {
     this.onNote?.(e);
     if (e.type === 'sustain') this.sustain = e.down;
     if (e.type !== 'noteon' && e.type !== 'noteoff') return;
-    if (!this.model.has(e.note) || this.staticNote !== null) return;
+    if (!this.running || !this.model.has(e.note) || this.staticNote !== null) return;
     const ctx = this.ctx();
     if (e.type === 'noteon') {
       const color = noteColor(e.note, e.velocity, pitchT(e.note, ctx), this.style);

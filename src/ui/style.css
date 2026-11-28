@@ -40,7 +40,7 @@ body.hide-cursor, body.hide-cursor * { cursor: none !important; }
 #setup input[type='color'] { padding: 0; width: 44px; height: 28px; }
 #setup input[type='checkbox'] { width: 18px; height: 18px; }
 #setup .slider { display: flex; align-items: center; gap: 6px; }
-#setup .slider output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: #aaa; }
+#setup .slider output { width: 54px; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; color: #aaa; }
 #setup .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 #setup button { cursor: pointer; }
 #setup button:hover { background: #2f2f38; }
@@ -134,3 +134,24 @@ kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 5
 #setup .chip input[type='color']::-webkit-color-swatch { border: 0; border-radius: 50%; }
 #setup .chip .mini { padding: 0 5px; font-size: 11px; line-height: 16px; }
 .editor-main > .hint { margin: 8px 0 0; }
+
+/* Coins croisés : contour rouge + message */
+.calib-svg.invalid polygon { stroke: #ef4444; stroke-dasharray: none; }
+.calib-warning {
+  position: absolute; left: 50%; top: 72px; transform: translateX(-50%); max-width: min(560px, 90vw);
+  background: #7f1d1d; color: #fff; padding: 8px 14px; border-radius: 8px; pointer-events: none; z-index: 3;
+}
+
+/* Saisie d'un nom (préréglage, profil) sans boîte de dialogue */
+.name-entry { display: inline-flex; gap: 4px; align-items: center; }
+#setup .name-entry input[type='text'] { width: 170px; }
+
+/* Bulles d'aide au survol (data-help) */
+#setup .has-help > .label::after { content: ' ⓘ'; color: #667; font-size: 11px; }
+#setup .has-help:hover > .label::after { color: #ffd24a; }
+#tooltip {
+  position: fixed; left: 0; top: 0; z-index: 1000; max-width: 320px; padding: 8px 11px; border-radius: 8px;
+  background: #1c1c24; border: 1px solid #4a4a58; color: #e8e8ee; font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55); pointer-events: none; opacity: 0; transition: opacity 0.12s;
+}
+#tooltip.show { opacity: 1; }

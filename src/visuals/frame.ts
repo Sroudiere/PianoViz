@@ -17,6 +17,8 @@ export interface FrameContext {
 
 /** Une note visible (en vol ou tenue), telle que les calques d'effets la voient. */
 export interface NoteSprite {
+  /** Identifiant unique de cette note en vol (stable d'une image à l'autre). */
+  id: number;
   note: number;
   color: number;
   velocity: number;

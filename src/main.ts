@@ -8,6 +8,7 @@ import { VirtualKeyboard } from './midi/virtualKeyboard';
 import { DemoPlayer, PreviewLoop } from './midi/demoPlayer';
 import { Renderer } from './visuals/renderer';
 import { SetupScreen } from './ui/setup';
+import { installTooltips } from './ui/tooltip';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -61,6 +62,8 @@ async function main(): Promise<void> {
         setup.editor.attach(preview);
       }
       await previewReady;
+      // L'onglet a pu changer pendant le premier chargement de l'aperçu.
+      if (!previewOn) return;
       preview.maxParticles = settings.performance.maxParticles;
       preview.setRunning(true);
       applyPreviewMode();
@@ -71,6 +74,7 @@ async function main(): Promise<void> {
   };
 
   // --- Écran de réglage (F2) ---
+  installTooltips();
   let learning: number[] | null = null;
   let patternBeforeSetup = false;
   const setup: SetupScreen = new SetupScreen(() => settings, {
@@ -94,6 +98,8 @@ async function main(): Promise<void> {
       renderer.showPattern(tab === 'position' ? true : patternBeforeSetup);
       if (tab !== 'position') renderer.highlight(null);
       void setPreview(tab === 'visuels');
+      // Les onglets Visuels et Entrée MIDI couvrent toute l'image : inutile de la calculer derrière.
+      renderer.setRunning(tab !== 'visuels' && tab !== 'entree');
     },
     startLearn: () => {
       learning = [];
@@ -129,6 +135,7 @@ async function main(): Promise<void> {
         applyTransform();
         midi.select(settings.midiInputId);
         setup.refresh();
+        setup.editor.resetHistory();
         corners.render();
         saveSettings(settings);
         hint('Réglages importés');

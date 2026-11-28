@@ -52,9 +52,11 @@ export class MidiInput {
   private bind(): void {
     if (!this.access) return;
     const devices: MidiDeviceInfo[] = [];
+    this.access.inputs.forEach((input) => devices.push({ id: input.id, name: input.name ?? input.id }));
+    // Entrée choisie débranchée : on écoute toutes les entrées plutôt que de rester sourd.
+    const selectedPresent = this.selectedId !== null && devices.some((d) => d.id === this.selectedId);
     this.access.inputs.forEach((input) => {
-      devices.push({ id: input.id, name: input.name ?? input.id });
-      const listen = this.selectedId === null || this.selectedId === input.id;
+      const listen = !selectedPresent || this.selectedId === input.id;
       input.onmidimessage = listen
         ? (msg: MIDIMessageEvent) => {
             if (!msg.data) return;

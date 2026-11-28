@@ -1,5 +1,5 @@
 import type { CalibrationProfile } from '../config/settings';
-import type { Point } from './homography';
+import { isConvex, type Point, type Quad } from './homography';
 
 export const CORNER_NAMES = ['haut gauche', 'haut droit', 'bas droit', 'bas gauche'];
 
@@ -10,6 +10,8 @@ export const CORNER_NAMES = ['haut gauche', 'haut droit', 'bas droit', 'bas gauc
 export class CornerEditor {
   private handles: HTMLDivElement[] = [];
   private outline: SVGPolygonElement;
+  private svg: SVGSVGElement;
+  private warning = document.createElement('div');
   private dragging: number | null = null;
   private selected = 3;
   active = false;
@@ -25,11 +27,16 @@ export class CornerEditor {
     this.outline = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     svg.appendChild(this.outline);
     root.appendChild(svg);
+    this.svg = svg;
+    this.warning.className = 'calib-warning';
+    this.warning.textContent = 'Coins croisés : l\'image ne peut pas être déformée ainsi. Remets les coins dans l\'ordre 1 haut gauche, 2 haut droit, 3 bas droit, 4 bas gauche.';
+    this.warning.hidden = true;
+    root.appendChild(this.warning);
 
     for (let i = 0; i < 4; i++) {
       const h = document.createElement('div');
       h.className = 'calib-handle';
-      h.title = `Coin ${CORNER_NAMES[i]}`;
+      h.dataset.help = `Coin ${CORNER_NAMES[i]} : glisse-le sur le mur, ou appuie sur ${i + 1} puis utilise les flèches.`;
       h.textContent = String(i + 1);
       h.addEventListener('pointerdown', (e) => {
         this.dragging = i;
@@ -40,6 +47,7 @@ export class CornerEditor {
         if (this.dragging === i) this.move(i, { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
       });
       h.addEventListener('pointerup', () => (this.dragging = null));
+      h.addEventListener('pointercancel', () => (this.dragging = null));
       root.appendChild(h);
       this.handles.push(h);
     }
@@ -99,5 +107,9 @@ export class CornerEditor {
       h.classList.toggle('selected', i === this.selected);
     });
     this.outline.setAttribute('points', corners.map((c) => `${c.x * W},${c.y * H}`).join(' '));
+    // Quadrilatère croisé (non convexe) : la déformation est refusée, on le signale en rouge.
+    const bad = !isConvex(corners.map((c) => ({ x: c.x * W, y: c.y * H })) as Quad);
+    this.svg.classList.toggle('invalid', bad);
+    this.warning.hidden = !bad;
   }
 }

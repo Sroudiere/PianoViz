@@ -13,7 +13,7 @@ export interface CalibrationProfile {
 
 export interface Settings {
   version: 1;
-  keyboard: { lowest: number; highest: number; widthCm: number };
+  keyboard: { lowest: number; highest: number };
   midiInputId: string | null;
   /** Style visuel courant, édité dans l'onglet Visuels. */
   style: VisualStyle;
@@ -43,7 +43,7 @@ export const defaultProfile = (name = 'Par défaut'): CalibrationProfile => ({
 
 export const defaultSettings = (): Settings => ({
   version: 1,
-  keyboard: { lowest: 21, highest: 108, widthCm: 122 },
+  keyboard: { lowest: 21, highest: 108 },
   midiInputId: null,
   style: defaultStyle(),
   userPresets: [],
@@ -62,7 +62,7 @@ export function sanitize(input: unknown): Settings {
   const s = input as Partial<Settings>;
   const out: Settings = {
     ...d,
-    keyboard: { ...d.keyboard, ...(s.keyboard ?? {}) },
+    keyboard: { lowest: Number(s.keyboard?.lowest), highest: Number(s.keyboard?.highest) },
     midiInputId: typeof s.midiInputId === 'string' ? s.midiInputId : null,
     style: sanitizeStyle(s.style),
     userPresets: Array.isArray(s.userPresets) ? s.userPresets.map(sanitizeStyle) : [],

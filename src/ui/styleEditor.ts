@@ -1,8 +1,9 @@
 import { BUILTIN_PRESETS, cloneStyle, type ColorRef, type VisualStyle } from '../style/style';
 import type { Settings } from '../config/settings';
 import type { Renderer } from '../visuals/renderer';
-import { gradient3, hexToNum, resolve } from '../visuals/colors';
-import { button, h, numToHex, opt, row } from './dom';
+import { hexToNum, resolve } from '../visuals/colors';
+import { button, h, nameEntry, numToHex, opt, row } from './dom';
+import { help } from './tooltip';
 
 type LayerId = 'color' | 'note' | 'particles' | 'keyLine' | 'keyGlow' | 'impact' | 'guides' | 'motion';
 export type PreviewMode = 'loop' | 'single';
@@ -16,102 +17,105 @@ interface Layer {
 }
 
 const LAYERS: Layer[] = [
-  { id: 'color', label: 'Fond et couleurs', hint: 'Couleur du fond et règle qui colore chaque note.' },
-  { id: 'note', label: 'Note', toggle: 'note.enabled', hint: 'Forme, remplissage, contour et halo des notes.' },
-  { id: 'particles', label: 'Particules', toggle: 'particles.enabled', hint: 'Étincelles, poussière ou fumée.' },
-  { id: 'keyLine', label: 'Ligne du clavier', toggle: 'keyLine.enabled', hint: 'Ligne de lueur ondulante au ras des touches.' },
-  { id: 'keyGlow', label: 'Lueur des touches', toggle: 'keyGlow.enabled', hint: 'Halo vertical au-dessus des touches tenues.' },
-  { id: 'impact', label: 'Éclair d\'impact', toggle: 'impact.enabled', hint: 'Point lumineux là où la note touche le clavier.' },
-  { id: 'guides', label: 'Repères', toggle: 'guides.enabled', hint: 'Lignes verticales à chaque Do.' },
-  { id: 'motion', label: 'Mouvement', hint: 'Vitesse et charge maximale.' },
+  { id: 'color', label: 'Fond et couleurs', hint: 'La couleur du fond et la règle qui donne sa couleur à chaque note.' },
+  { id: 'note', label: 'Note', toggle: 'note.enabled', hint: 'Le rectangle de chaque note : forme, remplissage, contour et halo.' },
+  { id: 'particles', label: 'Particules', toggle: 'particles.enabled', hint: 'Étincelles, poussière ou fumée qui jaillissent des touches ou suivent les notes.' },
+  { id: 'keyLine', label: 'Ligne du clavier', toggle: 'keyLine.enabled', hint: 'La ligne lumineuse au ras des touches, qui ondule et s\'embrase quand on joue.' },
+  { id: 'keyGlow', label: 'Lueur des touches', toggle: 'keyGlow.enabled', hint: 'Une colonne de lumière douce au-dessus de chaque touche tenue.' },
+  { id: 'impact', label: 'Éclair d\'impact', toggle: 'impact.enabled', hint: 'Un éclat lumineux là où la note touche le clavier, plus fort au moment de l\'appui.' },
+  { id: 'guides', label: 'Repères', toggle: 'guides.enabled', hint: 'De fines lignes verticales à chaque Do, pour se repérer dans les octaves.' },
+  { id: 'motion', label: 'Mouvement et performance', hint: 'La vitesse des notes et la charge maximale de calcul.' },
 ];
 
-type Field =
-  | { kind: 'range'; path: string; label: string; min: number; max: number; step: number; when?: (s: VisualStyle) => boolean }
-  | { kind: 'toggle'; path: string; label: string; when?: (s: VisualStyle) => boolean }
-  | { kind: 'select'; path: string; label: string; options: [string, string][]; when?: (s: VisualStyle) => boolean }
-  | { kind: 'color'; path: string; label: string; when?: (s: VisualStyle) => boolean }
-  | { kind: 'cref'; path: string; label: string; when?: (s: VisualStyle) => boolean }
-  | { kind: 'gradient'; path: string; label: string; when?: (s: VisualStyle) => boolean };
+type When = (s: VisualStyle) => boolean;
+type Field = { path: string; label: string; help: string; when?: When } & (
+  | { kind: 'range'; min: number; max: number; step: number; unit?: string }
+  | { kind: 'toggle' }
+  | { kind: 'select'; options: [string, string][] }
+  | { kind: 'color' }
+  | { kind: 'cref' }
+  | { kind: 'gradient' }
+);
 
 const FIELDS: Record<LayerId, Field[]> = {
   color: [
-    { kind: 'color', path: 'background', label: 'Fond' },
+    { kind: 'color', path: 'background', label: 'Couleur du fond', help: 'Couleur derrière les effets. Garde du noir pur en projection : toute autre couleur éclaire le mur.' },
     {
       kind: 'select',
       path: 'color.mode',
       label: 'Couleur des notes',
+      help: 'Comment chaque note reçoit sa couleur : selon la main (grave / aigu), un dégradé du grave à l\'aigu, une couleur unique, la note (12 teintes), l\'octave ou la force de frappe.',
       options: [
-        ['hands', 'Par main'],
-        ['gradient', 'Dégradé le long du clavier'],
+        ['hands', 'Selon la main'],
+        ['gradient', 'Dégradé du grave à l\'aigu'],
         ['single', 'Couleur unique'],
-        ['pitch', 'Par note (12 teintes)'],
-        ['octave', 'Par octave'],
-        ['velocity', 'Par vélocité'],
+        ['pitch', 'Selon la note (12 teintes)'],
+        ['octave', 'Selon l\'octave'],
+        ['velocity', 'Selon la force de frappe'],
       ],
     },
-    { kind: 'color', path: 'color.left', label: 'Main gauche', when: (s) => s.color.mode === 'hands' },
-    { kind: 'color', path: 'color.right', label: 'Main droite', when: (s) => s.color.mode === 'hands' },
-    { kind: 'range', path: 'color.splitNote', label: 'Séparation (MIDI, 60 = Do3)', min: 36, max: 84, step: 1, when: (s) => s.color.mode === 'hands' },
-    { kind: 'color', path: 'color.single', label: 'Couleur', when: (s) => s.color.mode === 'single' },
-    { kind: 'gradient', path: 'color.gradient', label: 'Grave → aigu', when: (s) => s.color.mode === 'gradient' },
-    { kind: 'range', path: 'color.velocity', label: 'Effet de la vélocité', min: 0, max: 1, step: 0.05 },
+    { kind: 'color', path: 'color.left', label: 'Main gauche', help: 'Couleur des notes plus graves que la note de séparation.', when: (s) => s.color.mode === 'hands' },
+    { kind: 'color', path: 'color.right', label: 'Main droite', help: 'Couleur des notes égales ou plus aiguës que la note de séparation.', when: (s) => s.color.mode === 'hands' },
+    { kind: 'range', path: 'color.splitNote', label: 'Note de séparation des mains', help: 'Numéro MIDI de la première note « main droite ». 60 = Do3 (do du milieu du clavier).', min: 36, max: 84, step: 1, when: (s) => s.color.mode === 'hands' },
+    { kind: 'color', path: 'color.single', label: 'Couleur des notes', help: 'La couleur commune à toutes les notes.', when: (s) => s.color.mode === 'single' },
+    { kind: 'gradient', path: 'color.gradient', label: 'Dégradé du grave à l\'aigu', help: 'Trois couleurs : la note la plus grave du clavier, le milieu, la plus aiguë. Les notes entre les deux prennent la couleur intermédiaire.', when: (s) => s.color.mode === 'gradient' },
+    { kind: 'range', path: 'color.velocity', label: 'Nuance selon la force', help: 'À 0, toutes les notes ont la même luminosité. Plus la valeur est haute, plus une note jouée doucement est sombre.', min: 0, max: 1, step: 0.05 },
   ],
   note: [
-    { kind: 'select', path: 'note.shape', label: 'Forme', options: [['rounded', 'Coins arrondis'], ['capsule', 'Capsule'], ['bevel', 'Cristal (coins coupés)'], ['rect', 'Rectangle']] },
-    { kind: 'range', path: 'note.radius', label: 'Arrondi / coupe', min: 0, max: 1, step: 0.05, when: (s) => s.note.shape === 'rounded' || s.note.shape === 'bevel' },
-    { kind: 'range', path: 'note.width', label: 'Largeur', min: 0.1, max: 1, step: 0.02 },
-    { kind: 'range', path: 'note.minLength', label: 'Longueur minimale', min: 0.2, max: 3, step: 0.1 },
-    { kind: 'select', path: 'note.fill.type', label: 'Remplissage', options: [['solid', 'Uni'], ['gradient', 'Dégradé'], ['none', 'Aucun (contour seul)']] },
-    { kind: 'cref', path: 'note.fill.top', label: 'Haut', when: (s) => s.note.fill.type === 'gradient' },
-    { kind: 'cref', path: 'note.fill.bottom', label: 'Couleur / bas', when: (s) => s.note.fill.type !== 'none' },
-    { kind: 'range', path: 'note.fill.opacity', label: 'Opacité', min: 0, max: 1, step: 0.02, when: (s) => s.note.fill.type !== 'none' },
-    { kind: 'range', path: 'note.shine', label: 'Reflet de verre', min: 0, max: 1, step: 0.05 },
-    { kind: 'toggle', path: 'note.stroke.enabled', label: 'Contour' },
-    { kind: 'cref', path: 'note.stroke.color', label: 'Couleur du contour', when: (s) => s.note.stroke.enabled },
-    { kind: 'range', path: 'note.stroke.width', label: 'Épaisseur', min: 0.5, max: 8, step: 0.25, when: (s) => s.note.stroke.enabled },
-    { kind: 'range', path: 'note.stroke.opacity', label: 'Opacité du contour', min: 0, max: 1, step: 0.05, when: (s) => s.note.stroke.enabled },
-    { kind: 'toggle', path: 'note.stroke.neon', label: 'Effet néon (cœur blanc)', when: (s) => s.note.stroke.enabled },
-    { kind: 'toggle', path: 'note.glow.enabled', label: 'Halo' },
-    { kind: 'range', path: 'note.glow.size', label: 'Taille du halo', min: 0, max: 60, step: 1, when: (s) => s.note.glow.enabled },
-    { kind: 'range', path: 'note.glow.intensity', label: 'Intensité du halo', min: 0, max: 1.5, step: 0.05, when: (s) => s.note.glow.enabled },
-    { kind: 'range', path: 'note.fadeTop', label: 'Fondu en haut', min: 0, max: 1, step: 0.05 },
+    { kind: 'select', path: 'note.shape', label: 'Forme', help: 'Coins arrondis, capsule (bouts entièrement ronds), cristal (coins coupés en biseau) ou rectangle net.', options: [['rounded', 'Coins arrondis'], ['capsule', 'Capsule'], ['bevel', 'Cristal (coins coupés)'], ['rect', 'Rectangle']] },
+    { kind: 'range', path: 'note.radius', label: 'Arrondi des coins', help: 'Taille de l\'arrondi (ou de la coupe pour la forme cristal), de 0 (angle droit) à 1 (demi-cercle).', min: 0, max: 1, step: 0.05, when: (s) => s.note.shape === 'rounded' || s.note.shape === 'bevel' },
+    { kind: 'range', path: 'note.width', label: 'Largeur', help: 'Largeur de la note par rapport à sa touche : 1 = toute la largeur de la touche.', min: 0.1, max: 1, step: 0.02 },
+    { kind: 'range', path: 'note.minLength', label: 'Longueur d\'une note brève', help: 'Longueur minimale d\'une note très courte, en largeurs de note. Une note relâchée très vite continue de sortir du clavier jusqu\'à cette longueur.', min: 0.2, max: 3, step: 0.1 },
+    { kind: 'select', path: 'note.fill.type', label: 'Remplissage', help: 'Uni : une seule couleur. Dégradé : du haut vers le bas de la note. Aucun : seul le contour est dessiné (effet néon).', options: [['solid', 'Uni'], ['gradient', 'Dégradé haut → bas'], ['none', 'Aucun (contour seul)']] },
+    { kind: 'cref', path: 'note.fill.top', label: 'Couleur du haut', help: 'Couleur en haut de la note.', when: (s) => s.note.fill.type === 'gradient' },
+    { kind: 'cref', path: 'note.fill.bottom', label: 'Couleur du remplissage', help: 'Couleur de la note (en bas de la note pour un dégradé).', when: (s) => s.note.fill.type !== 'none' },
+    { kind: 'range', path: 'note.fill.opacity', label: 'Opacité du remplissage', help: 'À 1 la note est pleine ; plus bas, elle devient translucide comme du verre.', min: 0, max: 1, step: 0.02, when: (s) => s.note.fill.type !== 'none' },
+    { kind: 'range', path: 'note.shine', label: 'Reflet de verre', help: 'Intensité de la bande claire verticale sur le côté de la note, qui donne un aspect brillant.', min: 0, max: 1, step: 0.05 },
+    { kind: 'toggle', path: 'note.stroke.enabled', label: 'Contour', help: 'Dessine un trait autour de la note.' },
+    { kind: 'cref', path: 'note.stroke.color', label: 'Couleur du contour', help: 'Couleur du trait autour de la note.', when: (s) => s.note.stroke.enabled },
+    { kind: 'range', path: 'note.stroke.width', label: 'Épaisseur du contour', help: 'Épaisseur du trait, en pixels.', min: 0.5, max: 8, step: 0.25, unit: 'px', when: (s) => s.note.stroke.enabled },
+    { kind: 'range', path: 'note.stroke.opacity', label: 'Opacité du contour', help: 'À 1 le trait est plein, plus bas il s\'efface.', min: 0, max: 1, step: 0.05, when: (s) => s.note.stroke.enabled },
+    { kind: 'toggle', path: 'note.stroke.neon', label: 'Effet néon', help: 'Ajoute un fin cœur blanc au milieu du contour, comme un tube néon allumé.', when: (s) => s.note.stroke.enabled },
+    { kind: 'toggle', path: 'note.glow.enabled', label: 'Halo', help: 'Une lueur floue autour de la note. C\'est l\'effet le plus coûteux : à couper en premier si l\'image saccade.' },
+    { kind: 'range', path: 'note.glow.size', label: 'Taille du halo', help: 'Distance sur laquelle la lueur s\'étale autour de la note, en pixels.', min: 0, max: 60, step: 1, unit: 'px', when: (s) => s.note.glow.enabled },
+    { kind: 'range', path: 'note.glow.intensity', label: 'Intensité du halo', help: 'Luminosité de la lueur.', min: 0, max: 1.5, step: 0.05, when: (s) => s.note.glow.enabled },
+    { kind: 'range', path: 'note.fadeTop', label: 'Disparition en haut', help: 'Où les notes commencent à s\'effacer en montant : 0 = elles restent nettes jusqu\'en haut, 1 = elles s\'effacent dès la moitié.', min: 0, max: 1, step: 0.05 },
   ],
   particles: [
-    { kind: 'select', path: 'particles.kind', label: 'Type', options: [['sparks', 'Étincelles'], ['dust', 'Poussière'], ['smoke', 'Fumée']] },
-    { kind: 'select', path: 'particles.source', label: 'Sortent de', options: [['key', 'La touche'], ['note', 'La note (traînée)'], ['both', 'Les deux']] },
-    { kind: 'cref', path: 'particles.color', label: 'Couleur' },
-    { kind: 'range', path: 'particles.rate', label: 'Débit (par seconde)', min: 0, max: 400, step: 5 },
-    { kind: 'range', path: 'particles.burst', label: 'Gerbe à l\'attaque', min: 0, max: 150, step: 1 },
-    { kind: 'range', path: 'particles.life', label: 'Durée de vie (s)', min: 0.2, max: 5, step: 0.1 },
-    { kind: 'range', path: 'particles.speed', label: 'Vitesse', min: 0, max: 1.5, step: 0.02 },
-    { kind: 'range', path: 'particles.spread', label: 'Ouverture (°)', min: 0, max: 180, step: 1 },
-    { kind: 'range', path: 'particles.gravity', label: 'Gravité (− = monte)', min: -0.6, max: 1, step: 0.01 },
-    { kind: 'range', path: 'particles.turbulence', label: 'Turbulence', min: 0, max: 2, step: 0.05 },
-    { kind: 'range', path: 'particles.size', label: 'Taille', min: 0.2, max: 4, step: 0.05 },
-    { kind: 'range', path: 'particles.stretch', label: 'Étirement', min: 0, max: 2, step: 0.05, when: (s) => s.particles.kind === 'sparks' },
-    { kind: 'range', path: 'particles.opacity', label: 'Opacité', min: 0, max: 1, step: 0.02 },
+    { kind: 'select', path: 'particles.kind', label: 'Type', help: 'Étincelles : rapides, étirées, elles retombent. Poussière : fins points qui tourbillonnent. Fumée : grosses bouffées douces.', options: [['sparks', 'Étincelles'], ['dust', 'Poussière'], ['smoke', 'Fumée']] },
+    { kind: 'select', path: 'particles.source', label: 'Point de départ', help: 'La touche : les particules jaillissent du clavier tant que la note est tenue. La note : elles s\'échappent du rectangle qui monte et laissent une traînée. Les deux : mélange des deux.', options: [['key', 'La touche'], ['note', 'La note (traînée)'], ['both', 'Les deux']] },
+    { kind: 'cref', path: 'particles.color', label: 'Couleur', help: 'Couleur des particules.' },
+    { kind: 'range', path: 'particles.rate', label: 'Particules par seconde', help: 'Nombre de particules émises chaque seconde par note tenue (ou par note en vol pour une traînée).', min: 0, max: 400, step: 5, unit: '/s' },
+    { kind: 'range', path: 'particles.burst', label: 'Jaillissement à l\'appui', help: 'Nombre de particules lancées d\'un coup au moment où la touche est enfoncée. Plus fort si on joue fort.', min: 0, max: 150, step: 1 },
+    { kind: 'range', path: 'particles.life', label: 'Durée de vie', help: 'Temps en secondes avant qu\'une particule s\'éteigne. Plus long = elles montent plus haut et s\'accumulent.', min: 0.2, max: 5, step: 0.1, unit: 's' },
+    { kind: 'range', path: 'particles.speed', label: 'Vitesse de départ', help: 'Force avec laquelle les particules sont lancées vers le haut.', min: 0, max: 1.5, step: 0.02 },
+    { kind: 'range', path: 'particles.spread', label: 'Ouverture du jet', help: 'Angle du jet en degrés autour de la verticale : 0 = tout droit, 90 = en éventail jusqu\'à l\'horizontale.', min: 0, max: 180, step: 1, unit: '°' },
+    { kind: 'range', path: 'particles.gravity', label: 'Gravité', help: 'Positive : les particules ralentissent puis retombent. Négative : elles s\'élèvent comme de la fumée chaude.', min: -0.6, max: 1, step: 0.01 },
+    { kind: 'range', path: 'particles.turbulence', label: 'Tourbillons', help: 'Agitation de l\'air : à 0 les trajectoires sont droites, plus haut elles ondulent et tourbillonnent.', min: 0, max: 2, step: 0.05 },
+    { kind: 'range', path: 'particles.size', label: 'Taille', help: 'Taille des particules.', min: 0.2, max: 4, step: 0.05 },
+    { kind: 'range', path: 'particles.stretch', label: 'Étirement des étincelles', help: 'Allonge chaque étincelle dans le sens de sa course, comme un trait de lumière.', min: 0, max: 2, step: 0.05, when: (s) => s.particles.kind === 'sparks' },
+    { kind: 'range', path: 'particles.opacity', label: 'Opacité', help: 'Luminosité générale des particules.', min: 0, max: 1, step: 0.02 },
   ],
   keyLine: [
-    { kind: 'cref', path: 'keyLine.color', label: 'Couleur' },
-    { kind: 'range', path: 'keyLine.thickness', label: 'Épaisseur', min: 0.5, max: 8, step: 0.25 },
-    { kind: 'range', path: 'keyLine.waviness', label: 'Ondulation', min: 0, max: 1.5, step: 0.05 },
-    { kind: 'range', path: 'keyLine.glow', label: 'Lueur', min: 0, max: 1.5, step: 0.05 },
-    { kind: 'range', path: 'keyLine.reactive', label: 'Réaction aux notes', min: 0, max: 1.5, step: 0.05 },
+    { kind: 'cref', path: 'keyLine.color', label: 'Couleur', help: 'Couleur de la ligne. « Couleur de la note » suit la couleur des notes le long du clavier.' },
+    { kind: 'range', path: 'keyLine.thickness', label: 'Épaisseur', help: 'Épaisseur du trait lumineux, en pixels.', min: 0.5, max: 8, step: 0.25, unit: 'px' },
+    { kind: 'range', path: 'keyLine.waviness', label: 'Ondulation', help: 'Amplitude des vagues qui parcourent la ligne en permanence. 0 = ligne droite.', min: 0, max: 1.5, step: 0.05 },
+    { kind: 'range', path: 'keyLine.glow', label: 'Lueur', help: 'Intensité du halo flou autour de la ligne.', min: 0, max: 1.5, step: 0.05 },
+    { kind: 'range', path: 'keyLine.reactive', label: 'Embrasement au jeu', help: 'À quel point la ligne s\'illumine et s\'agite au-dessus des touches jouées.', min: 0, max: 1.5, step: 0.05 },
   ],
   keyGlow: [
-    { kind: 'range', path: 'keyGlow.height', label: 'Hauteur', min: 0.02, max: 0.8, step: 0.01 },
-    { kind: 'range', path: 'keyGlow.intensity', label: 'Intensité', min: 0, max: 1.5, step: 0.05 },
+    { kind: 'range', path: 'keyGlow.height', label: 'Hauteur', help: 'Hauteur de la colonne de lumière, en fraction de la zone d\'effets.', min: 0.02, max: 0.8, step: 0.01 },
+    { kind: 'range', path: 'keyGlow.intensity', label: 'Intensité', help: 'Luminosité de la colonne.', min: 0, max: 1.5, step: 0.05 },
   ],
   impact: [
-    { kind: 'range', path: 'impact.size', label: 'Taille', min: 0.2, max: 3, step: 0.05 },
-    { kind: 'range', path: 'impact.intensity', label: 'Intensité', min: 0, max: 1.5, step: 0.05 },
+    { kind: 'range', path: 'impact.size', label: 'Taille', help: 'Taille de l\'éclat, par rapport à la largeur de la touche.', min: 0.2, max: 3, step: 0.05 },
+    { kind: 'range', path: 'impact.intensity', label: 'Intensité', help: 'Luminosité de l\'éclat.', min: 0, max: 1.5, step: 0.05 },
   ],
   guides: [
-    { kind: 'color', path: 'guides.color', label: 'Couleur' },
-    { kind: 'range', path: 'guides.opacity', label: 'Opacité', min: 0, max: 0.6, step: 0.01 },
+    { kind: 'color', path: 'guides.color', label: 'Couleur', help: 'Couleur des lignes de repère.' },
+    { kind: 'range', path: 'guides.opacity', label: 'Opacité', help: 'Visibilité des lignes : gardez-les discrètes.', min: 0, max: 0.6, step: 0.01 },
   ],
-  motion: [{ kind: 'range', path: 'motion.riseSpeed', label: 'Vitesse de montée', min: 0.05, max: 1.5, step: 0.05 }],
+  motion: [{ kind: 'range', path: 'motion.riseSpeed', label: 'Vitesse de montée', help: 'Vitesse à laquelle les notes montent, en hauteurs de zone par seconde : à 0,5 une note traverse la zone en 2 secondes.', min: 0.05, max: 1.5, step: 0.05 }],
 };
 
 function get(obj: unknown, path: string): unknown {
@@ -124,6 +128,14 @@ function set(obj: unknown, path: string, value: unknown): void {
   const parent = keys.reduce<unknown>((o, k) => (o as Record<string, unknown>)[k], obj) as Record<string, unknown>;
   parent[last] = value;
 }
+
+/** Valeur affichée à côté d'un curseur : autant de décimales que le pas, virgule française. */
+const formatValue = (v: number, step: number, unit = '') => {
+  const decimals = step >= 1 ? 0 : Math.min(3, String(step).split('.')[1]?.length ?? 0);
+  return `${v.toFixed(decimals).replace('.', ',')}${unit && unit !== '°' ? ' ' : ''}${unit}`;
+};
+
+type HandleKind = 'width' | 'radius' | 'glow';
 
 /**
  * Éditeur de style, façon logiciel graphique :
@@ -141,44 +153,51 @@ export class StyleEditor {
   private readonly modeButtons = new Map<PreviewMode, HTMLButtonElement>();
   private readonly undoBtn: HTMLButtonElement;
   private readonly redoBtn: HTMLButtonElement;
+  private readonly handles: Record<HandleKind, HTMLDivElement>;
+  private readonly chips = h('div', { className: 'chips' });
+  private readonly noteBox = h('div', { className: 'note-box' });
   private layer: LayerId = 'note';
   mode: PreviewMode = 'loop';
+  private renderer: Renderer | null = null;
+
+  // Historique (annuler / rétablir) : instantanés JSON du style, regroupés par pauses de 350 ms.
   private history: string[] = [];
   private future: string[] = [];
   private historyTimer = 0;
   private lastSnapshot = '';
-  private renderer: Renderer | null = null;
-  private handles: Record<'width' | 'radius' | 'glow', HTMLDivElement>;
-  private chips: HTMLDivElement;
-  private noteBox = h('div', { className: 'note-box' });
-  private chipColor = -1;
+
+  // Mémo pour ne toucher au DOM de l'aperçu que si quelque chose a changé.
+  private chipsKey = '';
+  private placeKey = 'init';
 
   constructor(
     private s: () => Settings,
     private onChange: () => void,
     private onModeChange: (mode: PreviewMode) => void,
   ) {
-    this.undoBtn = button('↶ Annuler', () => this.undo(), 'icon');
-    this.redoBtn = button('↷ Rétablir', () => this.redo(), 'icon');
-    this.undoBtn.title = 'Annuler (Ctrl+Z)';
-    this.redoBtn.title = 'Rétablir (Ctrl+Y)';
+    this.undoBtn = button('↶ Annuler', () => this.undo(), 'icon', 'Annule la dernière modification des visuels (Ctrl+Z).');
+    this.redoBtn = button('↷ Rétablir', () => this.redo(), 'icon', 'Refait la modification annulée (Ctrl+Y).');
 
     const modes = h('div', { className: 'segmented' });
+    const modeHelp: Record<PreviewMode, string> = {
+      loop: 'L\'aperçu joue en boucle une petite mélodie sur une octave, pour voir les effets en mouvement.',
+      single: 'Une seule note immobile qui émet ses particules en continu. Tire les poignées jaunes et clique sur les pastilles pour la modifier directement.',
+    };
     for (const [m, label] of [['loop', 'Piano en boucle'], ['single', 'Note seule']] as [PreviewMode, string][]) {
-      const b = button(label, () => this.setMode(m));
+      const b = button(label, () => this.setMode(m), '', modeHelp[m]);
       this.modeButtons.set(m, b);
       modes.append(b);
     }
 
     this.handles = {
-      width: this.makeHandle('width', 'Largeur de la note : glisser', '↔'),
-      radius: this.makeHandle('radius', 'Arrondi des coins : glisser', '◜'),
-      glow: this.makeHandle('glow', 'Taille du halo : glisser', '✺'),
+      width: this.makeHandle('width', 'Largeur de la note : glisse vers la gauche ou la droite.', '↔'),
+      radius: this.makeHandle('radius', 'Arrondi des coins : glisse le long du haut de la note.', '◜'),
+      glow: this.makeHandle('glow', 'Taille du halo : éloigne ou rapproche de la note.', '✺'),
     };
-    this.chips = h('div', { className: 'chips' });
     this.noteBox.addEventListener('pointerdown', () => this.selectLayer('note'));
     this.overlay.append(this.noteBox, this.handles.width, this.handles.radius, this.handles.glow, this.chips);
     this.overlay.addEventListener('pointerdown', (e) => this.pickLayerAt(e));
+    this.overlay.dataset.layer = this.layer;
 
     const previewWrap = h('div', { className: 'preview-wrap' }, this.previewHost, this.overlay);
     const toolbar = h('div', { className: 'preview-toolbar' }, modes, h('span', { className: 'spacer' }), this.undoBtn, this.redoBtn);
@@ -188,13 +207,18 @@ export class StyleEditor {
       { className: 'editor-main' },
       toolbar,
       previewWrap,
-      h('p', { className: 'hint' }, 'Clique sur une partie de l\'aperçu pour choisir son calque. En « Note seule », tire les poignées ou clique sur les pastilles pour changer les couleurs.'),
+      h(
+        'p',
+        { className: 'hint' },
+        'Clique sur une partie de l\'aperçu pour ouvrir son calque. En « Note seule », tire les poignées et clique sur les pastilles pour changer les couleurs. Survole un réglage pour son explication.',
+      ),
     );
     this.el.append(this.presetBar, h('div', { className: 'editor-body' }, side, main));
 
     window.addEventListener('keydown', (e) => {
       if (!this.el.isConnected || this.el.offsetParent === null) return;
-      if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+      const t = e.target;
+      if ((t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox') || t instanceof HTMLTextAreaElement) return;
       const k = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -223,24 +247,40 @@ export class StyleEditor {
     if (notify) this.onModeChange(mode);
   }
 
-  /** Après un import ou un changement externe : tout relire. */
+  /** Après un changement venu d'ailleurs (profil, clavier…) : tout relire, sans perdre l'historique. */
   refresh(): void {
+    this.commit();
+    this.renderAll();
+  }
+
+  /** Après un import : les anciens instantanés n'ont plus de sens. */
+  resetHistory(): void {
+    window.clearTimeout(this.historyTimer);
+    this.history = [];
+    this.future = [];
     this.lastSnapshot = JSON.stringify(this.s().style);
     this.renderAll();
   }
 
   // ---------- Historique ----------
 
-  private changed(rerender = false): void {
+  /**
+   * Après chaque modification : prévenir l'application, rafraîchir ce qui en dépend
+   * et programmer un instantané d'historique.
+   * `inspector` : redessiner l'inspecteur (quand des champs apparaissent ou disparaissent).
+   */
+  private changed(opts: { inspector?: boolean } = {}): void {
     this.onChange();
-    if (rerender) this.renderInspector();
+    if (opts.inspector) this.renderInspector();
     this.renderLayers();
     this.renderChips();
+    this.renderPresets();
     window.clearTimeout(this.historyTimer);
     this.historyTimer = window.setTimeout(() => this.commit(), 350);
   }
 
   private commit(): void {
+    window.clearTimeout(this.historyTimer);
     const snap = JSON.stringify(this.s().style);
     if (snap === this.lastSnapshot) return;
     this.history.push(this.lastSnapshot);
@@ -266,6 +306,7 @@ export class StyleEditor {
   }
 
   private redo(): void {
+    this.commit();
     const next = this.future.pop();
     if (next === undefined) return;
     this.history.push(this.lastSnapshot);
@@ -297,39 +338,60 @@ export class StyleEditor {
     return sw;
   }
 
+  /** Préréglage personnel portant le nom du style courant, s'il y en a un. */
+  private userPresetIndex(): number {
+    const st = this.s();
+    return st.userPresets.findIndex((p) => p.name === st.style.name);
+  }
+
   private renderPresets(): void {
     const st = this.s();
     const current = JSON.stringify(st.style);
     const card = (p: VisualStyle, user: boolean) => {
       const active = JSON.stringify(p) === current;
       const b = h('button', { type: 'button', className: `preset${active ? ' active' : ''}${user ? ' user' : ''}` }, this.swatch(p), h('span', {}, p.name));
+      b.dataset.help = user
+        ? `Ton préréglage « ${p.name} » : clique pour l'appliquer (Ctrl+Z pour revenir en arrière).`
+        : `Préréglage fourni « ${p.name} » : clique pour l'appliquer, puis ajuste-le à ton goût (Ctrl+Z pour revenir en arrière).`;
       b.addEventListener('click', () => {
         st.style = cloneStyle(p);
-        this.changed();
-        this.renderAll();
+        this.changed({ inspector: true });
       });
       return b;
     };
-    const save = button('＋ Enregistrer', () => {
-      const name = prompt('Nom du préréglage', st.style.name)?.trim();
-      if (!name) return;
-      st.style.name = name;
-      const copy = cloneStyle(st.style);
-      const i = st.userPresets.findIndex((p) => p.name === name);
-      if (i >= 0) st.userPresets[i] = copy;
-      else st.userPresets.push(copy);
-      this.changed();
-      this.renderPresets();
-    }, 'primary');
-    const userActive = st.userPresets.findIndex((p) => p.name === st.style.name);
-    const del = button('Supprimer', () => {
-      if (userActive < 0) return;
-      st.userPresets.splice(userActive, 1);
-      this.changed();
-      this.renderPresets();
-    });
+    const builtinNames = new Set(BUILTIN_PRESETS.map((p) => p.name));
+    const save = nameEntry(
+      '＋ Enregistrer',
+      'Enregistre les visuels actuels comme préréglage personnel. Avec le nom d\'un préréglage personnel existant, il est mis à jour.',
+      'Nom du préréglage',
+      // Un préréglage fourni n'est jamais écrasé : on propose un autre nom.
+      () => (builtinNames.has(st.style.name) ? `${st.style.name} (perso)` : st.style.name),
+      (name) => {
+        if (builtinNames.has(name)) name = `${name} (perso)`;
+        st.style.name = name;
+        const copy = cloneStyle(st.style);
+        const i = st.userPresets.findIndex((p) => p.name === name);
+        if (i >= 0) st.userPresets[i] = copy;
+        else st.userPresets.push(copy);
+        this.changed();
+      },
+      'primary',
+    );
+    const userActive = this.userPresetIndex();
+    const del = button(
+      'Supprimer',
+      () => {
+        const i = this.userPresetIndex();
+        if (i < 0) return;
+        st.userPresets.splice(i, 1);
+        this.changed();
+      },
+      '',
+      userActive >= 0 ? `Supprime le préréglage personnel « ${st.style.name} » (les visuels affichés restent tels quels).` : 'Choisis d\'abord un de tes préréglages (★) pour pouvoir le supprimer.',
+    );
     del.disabled = userActive < 0;
-    del.title = 'Supprimer le préréglage personnel actif';
+    // Pendant la saisie d'un nom, ne pas reconstruire la barre (on perdrait le champ).
+    if (this.presetBar.querySelector('.name-entry input')) return;
     this.presetBar.replaceChildren(
       h('span', { className: 'label' }, 'Préréglages'),
       ...BUILTIN_PRESETS.map((p) => card(p, false)),
@@ -345,13 +407,18 @@ export class StyleEditor {
     this.layerList.replaceChildren(
       ...LAYERS.map((l) => {
         const li = h('li', { className: l.id === this.layer ? 'selected' : '' });
+        li.dataset.help = l.hint;
         if (l.toggle) {
           const on = Boolean(get(style, l.toggle));
-          const eye = button(on ? '●' : '○', () => {
-            set(style, l.toggle!, !on);
-            this.changed();
-          }, `eye${on ? ' on' : ''}`);
-          eye.title = on ? 'Masquer le calque' : 'Afficher le calque';
+          const eye = button(
+            on ? '●' : '○',
+            () => {
+              set(style, l.toggle!, !on);
+              this.changed({ inspector: l.id === this.layer });
+            },
+            `eye${on ? ' on' : ''}`,
+            on ? `Calque affiché : clique pour masquer « ${l.label} ».` : `Calque masqué : clique pour afficher « ${l.label} ».`,
+          );
           li.append(eye);
         } else li.append(h('span', { className: 'eye placeholder' }));
         li.append(h('span', { className: 'name' }, l.label));
@@ -367,9 +434,9 @@ export class StyleEditor {
   selectLayer(id: LayerId): void {
     if (this.layer === id) return;
     this.layer = id;
+    this.overlay.dataset.layer = id;
     this.renderLayers();
     this.renderInspector();
-    this.overlay.dataset.layer = id;
   }
 
   private renderInspector(): void {
@@ -378,21 +445,27 @@ export class StyleEditor {
     const fields = FIELDS[layer.id].filter((f) => !f.when || f.when(style));
     const extra: HTMLElement[] = [];
     if (layer.id === 'motion') {
-      const input = h('input', { type: 'range', min: '200', max: '8000', step: '100', value: String(this.s().performance.maxParticles) });
-      const out = h('output', {}, input.value);
+      const perf = this.s().performance;
+      const input = h('input', { type: 'range', min: '200', max: '8000', step: '100', value: String(perf.maxParticles) });
+      const out = h('output', {}, String(perf.maxParticles));
       input.addEventListener('input', () => {
-        this.s().performance.maxParticles = Number(input.value);
+        perf.maxParticles = Number(input.value);
         out.textContent = input.value;
         this.onChange();
       });
-      extra.push(row('Particules max (performance)', h('span', { className: 'slider' }, input, out)));
+      extra.push(
+        row(
+          'Particules à l\'écran (maximum)',
+          'Plafond du nombre de particules affichées en même temps sur tout le clavier. À baisser si l\'image saccade sur une petite machine (Raspberry Pi, mini-PC).',
+          h('span', { className: 'slider' }, input, out),
+        ),
+      );
     }
-    if (layer.toggle && !get(style, layer.toggle)) {
-      extra.unshift(h('p', { className: 'hint warn' }, 'Calque masqué : clique sur ○ pour l\'afficher.'));
-    }
+    const hidden = layer.toggle && !get(style, layer.toggle);
     this.inspector.replaceChildren(
       h('h2', {}, layer.label),
       h('p', { className: 'hint' }, layer.hint),
+      ...(hidden ? [h('p', { className: 'hint warn' }, 'Calque masqué : clique sur ○ dans la liste pour l\'afficher.')] : []),
       ...fields.map((f) => this.field(f)),
       ...extra,
     );
@@ -404,30 +477,30 @@ export class StyleEditor {
     switch (f.kind) {
       case 'range': {
         const input = h('input', { type: 'range', min: String(f.min), max: String(f.max), step: String(f.step), value: String(v) });
-        const out = h('output', {}, String(v));
+        const out = h('output', {}, formatValue(Number(v), f.step, f.unit));
         input.addEventListener('input', () => {
           set(style, f.path, Number(input.value));
-          out.textContent = input.value;
+          out.textContent = formatValue(Number(input.value), f.step, f.unit);
           this.changed();
         });
-        return row(f.label, h('span', { className: 'slider' }, input, out));
+        return row(f.label, f.help, h('span', { className: 'slider' }, input, out));
       }
       case 'toggle': {
         const input = h('input', { type: 'checkbox', checked: Boolean(v) });
         input.addEventListener('input', () => {
           set(style, f.path, input.checked);
-          this.changed(true);
+          this.changed({ inspector: true });
         });
-        return row(f.label, input);
+        return row(f.label, f.help, input);
       }
       case 'select': {
         const sel = h('select');
         sel.append(...f.options.map(([val, label]) => opt(val, label, val === v)));
         sel.addEventListener('input', () => {
           set(style, f.path, sel.value);
-          this.changed(true);
+          this.changed({ inspector: true });
         });
-        return row(f.label, sel);
+        return row(f.label, f.help, sel);
       }
       case 'color': {
         const input = h('input', { type: 'color', value: String(v) });
@@ -435,15 +508,16 @@ export class StyleEditor {
           set(style, f.path, input.value);
           this.changed();
         });
-        return row(f.label, input);
+        return row(f.label, f.help, input);
       }
       case 'gradient': {
         const stops = v as [string, string, string];
         const bar = h('div', { className: 'gradient-bar' });
         const paint = () => (bar.style.background = `linear-gradient(90deg, ${stops.join(', ')})`);
         paint();
+        const names = ['Note la plus grave', 'Milieu du clavier', 'Note la plus aiguë'];
         const inputs = stops.map((c, i) => {
-          const input = h('input', { type: 'color', value: c });
+          const input = help(h('input', { type: 'color', value: c }), names[i]);
           input.addEventListener('input', () => {
             stops[i] = input.value;
             paint();
@@ -451,24 +525,25 @@ export class StyleEditor {
           });
           return input;
         });
-        return h('div', { className: 'field-block' }, h('span', { className: 'label' }, f.label), bar, h('div', { className: 'gradient-stops' }, ...inputs));
+        return help(
+          h('div', { className: 'field-block' }, h('span', { className: 'label' }, f.label), bar, h('div', { className: 'gradient-stops' }, ...inputs)),
+          f.help,
+        );
       }
       case 'cref':
-        return this.colorRefField(f.label, v as ColorRef);
+        return this.colorRefField(f.label, f.help, v as ColorRef);
     }
   }
 
-  /** Couleur de calque : « de la note » ou personnalisée, plus un curseur vers le blanc. */
-  private colorRefField(label: string, ref: ColorRef): HTMLElement {
+  /** Couleur de calque : celle de la note jouée ou une couleur choisie, plus un curseur vers le blanc. */
+  private colorRefField(label: string, helpText: string, ref: ColorRef): HTMLElement {
     const seg = h('div', { className: 'segmented small' });
-    const noteBtn = button('Note', () => {
-      ref.ref = 'note';
-      this.changed(true);
-    });
-    const customBtn = button('Perso', () => {
-      ref.ref = 'custom';
-      this.changed(true);
-    });
+    const setRef = (r: ColorRef['ref']) => {
+      ref.ref = r;
+      this.changed({ inspector: true });
+    };
+    const noteBtn = button('De la note', () => setRef('note'), '', 'Reprend la couleur de la note jouée (selon le réglage « Couleur des notes »).');
+    const customBtn = button('Choisie', () => setRef('custom'), '', 'Une couleur fixe, la même pour toutes les notes : choisis-la avec le carré de couleur.');
     noteBtn.classList.toggle('active', ref.ref === 'note');
     customBtn.classList.toggle('active', ref.ref === 'custom');
     seg.append(noteBtn, customBtn);
@@ -479,24 +554,24 @@ export class StyleEditor {
       this.changed();
     });
     const white = h('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(ref.white) });
-    const out = h('output', {}, String(ref.white));
+    const out = h('output', {}, formatValue(ref.white, 0.05));
     white.addEventListener('input', () => {
       ref.white = Number(white.value);
-      out.textContent = white.value;
+      out.textContent = formatValue(ref.white, 0.05);
       this.changed();
     });
     return h(
       'div',
       { className: 'field-block' },
-      h('div', { className: 'row' }, h('span', { className: 'label' }, label), seg, color),
-      row('↳ vers le blanc', h('span', { className: 'slider' }, white, out)),
+      help(h('div', { className: 'row' }, h('span', { className: 'label' }, label), seg, color), helpText),
+      row('↳ Éclaircir vers le blanc', 'Mélange cette couleur avec du blanc : 0 = couleur pure, 1 = blanc. Un peu de blanc donne un cœur plus lumineux.', h('span', { className: 'slider' }, white, out)),
     );
   }
 
   // ---------- Manipulation directe sur l'aperçu ----------
 
-  private makeHandle(kind: 'width' | 'radius' | 'glow', title: string, glyph: string): HTMLDivElement {
-    const el = h('div', { className: `handle handle-${kind}`, title }, glyph);
+  private makeHandle(kind: HandleKind, helpText: string, glyph: string): HTMLDivElement {
+    const el = help(h('div', { className: `handle handle-${kind}` }, glyph), helpText);
     el.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       el.setPointerCapture(e.pointerId);
@@ -505,10 +580,12 @@ export class StyleEditor {
       const up = () => {
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
         this.renderInspector();
       };
       el.addEventListener('pointermove', move);
       el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
     });
     return el;
   }
@@ -517,7 +594,7 @@ export class StyleEditor {
     return this.renderer?.notes.sprites[0] ?? null;
   }
 
-  private dragHandle(kind: 'width' | 'radius' | 'glow', ev: PointerEvent): void {
+  private dragHandle(kind: HandleKind, ev: PointerEvent): void {
     const sp = this.staticSprite();
     const r = this.renderer;
     if (!sp || !r) return;
@@ -551,20 +628,21 @@ export class StyleEditor {
     if (y > zone.height) return;
     if (y > zone.height - 18) return this.selectLayer(this.s().style.keyLine.enabled ? 'keyLine' : 'keyGlow');
     const hit = r.notes.sprites.find((s) => x >= s.cx - s.w / 2 - 6 && x <= s.cx + s.w / 2 + 6 && y >= s.yTop - 6 && y <= s.yBottom + 6);
-    if (hit) return this.selectLayer('note');
-    this.selectLayer('particles');
+    this.selectLayer(hit ? 'note' : 'particles');
   }
 
+  /** À chaque image de l'aperçu : poignées et pastilles collées à la note seule (DOM touché seulement si ça bouge). */
   private placeHandles(): void {
-    const single = this.mode === 'single';
-    const sp = single ? this.staticSprite() : null;
+    const sp = this.mode === 'single' ? this.staticSprite() : null;
+    const n = this.s().style.note;
+    const key = sp
+      ? [sp.cx, sp.w, sp.yTop, sp.yBottom, sp.color, n.shape, n.radius, n.glow.enabled, n.glow.size, this.layer].map((v) => (typeof v === 'number' ? Math.round(v) : v)).join('|')
+      : '';
+    if (key === this.placeKey) return;
+    this.placeKey = key;
     for (const el of [this.handles.width, this.handles.radius, this.handles.glow, this.chips, this.noteBox]) el.hidden = !sp;
     if (!sp) return;
-    if (sp.color !== this.chipColor) {
-      this.chipColor = sp.color;
-      this.renderChips();
-    }
-    const n = this.s().style.note;
+    this.renderChips();
     const left = sp.cx - sp.w / 2;
     const right = sp.cx + sp.w / 2;
     const midY = (sp.yTop + sp.yBottom) / 2;
@@ -580,34 +658,43 @@ export class StyleEditor {
 
   /** Pastilles posées au-dessus de la note : un clic ouvre le sélecteur de couleur. */
   private renderChips(): void {
-    const n = this.s().style.note;
-    const sp = this.staticSprite();
-    const noteCol = sp?.color ?? hexToNum(this.s().style.color.single);
-    const chip = (label: string, ref: ColorRef, enabled: boolean) => {
+    const style = this.s().style;
+    const n = style.note;
+    const noteCol = this.staticSprite()?.color ?? hexToNum(style.color.single);
+    const items: [string, string, ColorRef, boolean][] = [];
+    if (n.fill.type === 'gradient') items.push(['Haut', 'Couleur du haut de la note', n.fill.top, true]);
+    if (n.fill.type !== 'none') items.push([n.fill.type === 'gradient' ? 'Bas' : 'Remplissage', n.fill.type === 'gradient' ? 'Couleur du bas de la note' : 'Couleur de remplissage de la note', n.fill.bottom, true]);
+    items.push(['Contour', n.stroke.enabled ? 'Couleur du contour' : 'Couleur du contour (le contour est désactivé : active-le dans le calque Note)', n.stroke.color, n.stroke.enabled]);
+    if (style.particles.enabled) items.push(['Particules', 'Couleur des particules', style.particles.color, true]);
+
+    // Ne reconstruire que si les pastilles changent : sinon le sélecteur de couleur ouvert se fermerait.
+    const key = JSON.stringify([noteCol, items.map(([l, , ref, on]) => [l, ref.ref, ref.hex, on])]);
+    if (key === this.chipsKey) return;
+    this.chipsKey = key;
+
+    const chip = ([label, helpText, ref, enabled]: [string, string, ColorRef, boolean]) => {
       const input = h('input', { type: 'color', value: numToHex(resolve({ ...ref, white: 0 }, noteCol)) });
-      input.title = `${label} : choisir une couleur`;
       input.addEventListener('input', () => {
+        const wasNote = ref.ref === 'note';
         ref.ref = 'custom';
         ref.hex = input.value;
-        this.changed(true);
+        // La pastille en cours d'édition reste en place : on recalcule seulement la clé.
+        this.chipsKey = JSON.stringify([noteCol, items.map(([l, , r, on]) => [l, r.ref, r.hex, on])]);
+        this.changed({ inspector: wasNote });
+        reset.hidden = false;
       });
-      const reset = button('↺', () => {
-        ref.ref = 'note';
-        this.changed(true);
-      }, 'mini');
-      reset.title = 'Revenir à la couleur de la note';
+      const reset = button(
+        '↺',
+        () => {
+          ref.ref = 'note';
+          this.changed({ inspector: true });
+        },
+        'mini',
+        'Revenir à la couleur de la note jouée.',
+      );
       reset.hidden = ref.ref === 'note';
-      const wrap = h('label', { className: `chip${enabled ? '' : ' off'}` }, input, h('span', {}, label), reset);
-      return wrap;
+      return help(h('label', { className: `chip${enabled ? '' : ' off'}` }, input, h('span', {}, label), reset), `${helpText} : clique pour la choisir.`);
     };
-    const items: HTMLElement[] = [];
-    if (n.fill.type === 'gradient') items.push(chip('Haut', n.fill.top, true));
-    if (n.fill.type !== 'none') items.push(chip(n.fill.type === 'gradient' ? 'Bas' : 'Fond', n.fill.bottom, true));
-    items.push(chip('Contour', n.stroke.color, n.stroke.enabled));
-    if (this.s().style.particles.enabled) items.push(chip('Particules', this.s().style.particles.color, true));
-    this.chips.replaceChildren(...items);
+    this.chips.replaceChildren(...items.map(chip));
   }
 }
-
-/** Couleur d'aperçu d'un dégradé, pour d'éventuelles vignettes. */
-export const gradientPreview = (stops: [string, string, string], t: number) => numToHex(gradient3(stops, t));
