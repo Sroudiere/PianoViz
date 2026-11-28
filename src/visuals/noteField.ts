@@ -12,6 +12,8 @@ interface Bar {
   top: number;
   held: boolean;
   fixed: boolean;
+  /** La note a quitté la ligne du clavier et monte en entier. */
+  detached: boolean;
 }
 
 /** Trace la forme d'une note dans `g` (sans la remplir). */
@@ -58,7 +60,7 @@ export class NoteField {
     const prev = this.held.get(note);
     if (prev?.fixed) return;
     if (prev) prev.held = false;
-    const bar: Bar = { note, color, velocity, bottom: 0, top: 0, held: true, fixed: false };
+    const bar: Bar = { note, color, velocity, bottom: 0, top: 0, held: true, fixed: false, detached: false };
     this.bars.push(bar);
     this.held.set(note, bar);
   }
@@ -74,7 +76,7 @@ export class NoteField {
   setStatic(note: number | null, color = 0xffffff): void {
     this.clear();
     if (note === null) return;
-    const bar: Bar = { note, color, velocity: 1, bottom: 0.28, top: 0.74, held: true, fixed: true };
+    const bar: Bar = { note, color, velocity: 1, bottom: 0.28, top: 0.74, held: true, fixed: true, detached: true };
     this.bars.push(bar);
     this.held.set(note, bar);
   }
@@ -119,21 +121,31 @@ export class NoteField {
 
     const alive: Bar[] = [];
     for (const b of this.bars) {
+      const key = model.key(b.note);
+      const kw = key ? (key.x1 - key.x0) * W : 0;
+      const w = Math.max(2, kw * ns.width);
       if (!b.fixed) {
+        // La note sort progressivement de la ligne du clavier : son haut monte tant qu'elle est tenue.
+        // Une note relâchée très tôt continue de sortir jusqu'à sa longueur minimale, puis se détache.
         b.top += speed * dt;
-        if (!b.held) b.bottom += speed * dt;
+        if (!b.held && (b.detached || (b.top - b.bottom) * H >= w * ns.minLength)) {
+          b.detached = true;
+          b.bottom += speed * dt;
+        }
         if (b.bottom >= 1.05) continue;
       }
       alive.push(b);
-      const key = model.key(b.note);
       if (!key) continue;
 
-      const kw = (key.x1 - key.x0) * W;
-      const w = Math.max(2, kw * ns.width);
       const x = key.cx * W - w / 2;
       const yBottom = H - b.bottom * H;
-      const h = Math.max((b.top - b.bottom) * H, w * ns.minLength, 2);
-      const y = yBottom - h;
+      const visible = Math.max(0, (b.top - b.bottom) * H);
+      if (visible < 0.5) continue;
+      const y = yBottom - visible;
+      // Tant qu'elle est accrochée à la ligne, la forme se prolonge sous la ligne (hors de la zone visible) :
+      // seul son haut arrondi apparaît, comme une note qui émerge du clavier.
+      const r = ns.shape === 'capsule' ? w / 2 : ns.shape === 'rect' ? 0 : ns.radius * (w / 2);
+      const h = b.detached ? Math.max(visible, 1) : Math.max(visible, 2 * r + 2);
       const fade = b.fixed || ns.fadeTop <= 0 ? 1 : Math.max(0, Math.min(1, (1 - b.bottom) / (ns.fadeTop * 0.9 + 0.05)));
       this.sprites.push({ note: b.note, color: b.color, velocity: b.velocity, cx: key.cx * W, w, yTop: y, yBottom, held: b.held, fixed: b.fixed, alpha: fade });
       if (!ns.enabled || fade <= 0) continue;
@@ -158,7 +170,7 @@ export class NoteField {
       }
 
       // Reflet de verre : bande claire verticale sur le côté gauche.
-      if (ns.shine > 0 && h > 8) {
+      if (ns.shine > 0 && visible > 8) {
         const sw = Math.max(1.5, w * 0.16);
         const inset = Math.max(2, w * 0.14);
         this.body.roundRect(x + inset, y + inset, sw, Math.max(1, h - 2 * inset), sw / 2).fill({ color: 0xffffff, alpha: ns.shine * fade });

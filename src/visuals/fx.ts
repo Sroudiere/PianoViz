@@ -1,4 +1,5 @@
-import { BlurFilter, Container, Graphics } from 'pixi.js';
+import { BlurFilter, Container, Graphics, Sprite } from 'pixi.js';
+import { columnTexture, radialTexture } from './textures';
 import { mix, noteColor, resolve } from './colors';
 import type { FrameContext } from './frame';
 import { fbm } from './noise';
@@ -22,17 +23,20 @@ export class Guides {
   }
 }
 
-/** Lueur au-dessus des touches tenues : un dégradé vertical doux. */
+/** Lueur au-dessus des touches tenues : une colonne en vrai dégradé, aux bords adoucis. */
 export class KeyGlow {
-  readonly g = new Graphics();
-  private levels = new Map<number, { color: number; level: number; target: number; held: boolean }>();
+  readonly g = new Container();
+  private levels = new Map<number, { color: number; level: number; target: number; held: boolean; sprite: Sprite }>();
 
   constructor() {
     this.g.blendMode = 'add';
   }
 
   noteOn(note: number, velocity: number, color: number): void {
-    this.levels.set(note, { color, level: this.levels.get(note)?.level ?? 0, target: 0.5 + 0.5 * velocity, held: true });
+    const prev = this.levels.get(note);
+    const sprite = prev?.sprite ?? this.g.addChild(new Sprite(columnTexture()));
+    sprite.tint = color;
+    this.levels.set(note, { color, level: prev?.level ?? 0, target: 0.5 + 0.5 * velocity, held: true, sprite });
   }
 
   noteOff(note: number): void {
@@ -42,44 +46,51 @@ export class KeyGlow {
 
   update(ctx: FrameContext): void {
     const s = ctx.style.keyGlow;
-    this.g.clear();
-    const layers = 28;
     for (const [note, l] of this.levels) {
       if (l.held) l.level += (l.target - l.level) * Math.min(1, ctx.dt * 30);
       else l.level -= ctx.dt * (ctx.sustain ? 0.6 : 2.5);
       if (l.level <= 0.01 && !l.held) {
+        l.sprite.destroy();
         this.levels.delete(note);
         continue;
       }
-      if (!s.enabled) continue;
       const k = ctx.model.key(note);
-      if (!k) continue;
-      const x = k.x0 * ctx.width;
-      const w = (k.x1 - k.x0) * ctx.width;
-      for (let i = 0; i < layers; i++) {
-        const h = ctx.height * s.height * ((i + 1) / layers) ** 2;
-        this.g.rect(x, ctx.height - h, w, h).fill({ color: l.color, alpha: (l.level * s.intensity * 1.6) / layers });
-      }
+      l.sprite.visible = s.enabled && Boolean(k);
+      if (!k || !s.enabled) continue;
+      const kw = (k.x1 - k.x0) * ctx.width;
+      const w = kw * 1.5;
+      const h = ctx.height * s.height;
+      l.sprite.position.set(k.cx * ctx.width - w / 2, ctx.height - h);
+      l.sprite.width = w;
+      l.sprite.height = h;
+      l.sprite.alpha = Math.min(1, l.level * s.intensity * 1.2);
     }
   }
 
   clear(): void {
+    for (const l of this.levels.values()) l.sprite.destroy();
     this.levels.clear();
-    this.g.clear();
   }
 }
 
-/** Éclair au point d'impact : un point lumineux au ras de la touche, plus fort à l'attaque. */
+/** Éclair au point d'impact : halo doux teinté et cœur blanc au ras de la touche, plus fort à l'attaque. */
 export class Impact {
-  readonly g = new Graphics();
-  private flashes = new Map<number, { color: number; level: number; held: boolean }>();
+  readonly g = new Container();
+  private flashes = new Map<number, { color: number; level: number; held: boolean; halo: Sprite; core: Sprite }>();
 
   constructor() {
     this.g.blendMode = 'add';
   }
 
   noteOn(note: number, velocity: number, color: number): void {
-    this.flashes.set(note, { color, level: 0.6 + velocity * 0.8, held: true });
+    const prev = this.flashes.get(note);
+    const halo = prev?.halo ?? this.g.addChild(new Sprite(radialTexture()));
+    const core = prev?.core ?? this.g.addChild(new Sprite(radialTexture()));
+    halo.anchor.set(0.5);
+    core.anchor.set(0.5);
+    halo.tint = color;
+    core.tint = 0xffffff;
+    this.flashes.set(note, { color, level: 0.6 + velocity * 0.8, held: true, halo, core });
   }
 
   noteOff(note: number): void {
@@ -89,29 +100,39 @@ export class Impact {
 
   update(ctx: FrameContext): void {
     const s = ctx.style.impact;
-    this.g.clear();
     for (const [note, f] of this.flashes) {
       const rest = f.held ? 0.45 : 0;
       f.level += (rest - f.level) * Math.min(1, ctx.dt * (f.held ? 3 : 6));
       if (!f.held && f.level < 0.02) {
+        f.halo.destroy();
+        f.core.destroy();
         this.flashes.delete(note);
         continue;
       }
-      if (!s.enabled) continue;
       const k = ctx.model.key(note);
-      if (!k) continue;
+      const on = s.enabled && Boolean(k);
+      f.halo.visible = f.core.visible = on;
+      if (!k || !on) continue;
       const kw = (k.x1 - k.x0) * ctx.width;
-      const r = kw * 0.9 * s.size;
-      const a = f.level * s.intensity;
-      for (let i = 6; i >= 1; i--) {
-        this.g.ellipse(k.cx * ctx.width, ctx.height, (r * i) / 6, (r * i) / 9).fill({ color: i <= 2 ? 0xffffff : f.color, alpha: (a * 0.22) / i });
-      }
+      const r = kw * 1.6 * s.size;
+      const a = Math.min(1, f.level * s.intensity);
+      f.halo.position.set(k.cx * ctx.width, ctx.height);
+      f.halo.width = r * 2;
+      f.halo.height = r * 1.2;
+      f.halo.alpha = a * 0.9;
+      f.core.position.set(k.cx * ctx.width, ctx.height);
+      f.core.width = r * 0.7;
+      f.core.height = r * 0.4;
+      f.core.alpha = a * 0.8;
     }
   }
 
   clear(): void {
+    for (const f of this.flashes.values()) {
+      f.halo.destroy();
+      f.core.destroy();
+    }
     this.flashes.clear();
-    this.g.clear();
   }
 }
 
