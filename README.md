@@ -2,7 +2,9 @@
 
 Visualiseur MIDI live, projeté sur un mur au-dessus d'un piano numérique : chaque touche jouée fait naître un effet qui monte depuis la touche. Un mode tutoriel (notes qui descendent et attendent la bonne touche) viendra ensuite.
 
-![Calibrage : la zone d'effets déformée par les 4 coins, avec la mire des touches](docs/calibrage.png)
+![Réglages, onglet Positionnement : les 4 coins sur la mire projetée](docs/calibrage.png)
+
+![Réglages, onglet Visuels : options à gauche, aperçu en direct sur une octave à droite](docs/visuels.png)
 
 ## Démarrer
 
@@ -26,34 +28,33 @@ Branche le piano en USB avant ou après le lancement : il est détecté à chaud
 
 | Touche | Action |
 | --- | --- |
-| Tab | Ouvrir ou fermer le panneau de réglages (aussi pendant le calibrage) |
-| F2 | Calibrage (Échap pour quitter) |
+| F2 | Ouvrir ou fermer les réglages (Échap pour fermer) |
 | F3 | Afficher la mire |
 | F4 | Démo automatique |
 | F8 | Plein écran |
 | A W S E D F T G Y H U J K… | Clavier virtuel (Z / X : octave, Maj : fort, Espace : pédale) |
 
-## Calibrage
+## Réglages (F2)
 
-F2 ouvre le calibrage, avec le panneau de réglages à côté : tout se règle au même endroit pendant que la mire et les effets restent visibles sur le mur. Le bouton ⇄ du panneau le passe à gauche ou à droite pour dégager les coins qu'on règle.
+Les réglages sont répartis en trois onglets.
 
-1. **Clavier et visuels** : choisis 61, 76 ou 88 touches, ou clique « Apprendre » puis joue la touche la plus grave et la plus aiguë. Règle ensuite les effets et les couleurs en jouant quelques notes (ou F4 pour la démo).
-2. **Coins** : fais glisser les 4 poignées sur le mur. Bas gauche et bas droit à l'aplomb des bords du clavier, vus depuis le tabouret ; haut gauche et haut droit en haut de la zone d'effets. Touches `1`–`4` pour choisir un coin, flèches pour 1 px, Maj + flèches pour 10 px.
-3. **Touches** : assis au tabouret, joue une touche ; si sa colonne n'est pas pile au-dessus, `←` `→` la décale. Deux ou trois points (gauche, milieu, droite) suffisent ; la correction est interpolée entre eux.
+- **Positionnement** (ouvert par défaut) : fais glisser les 4 poignées sur le mur. Bas gauche et bas droit à l'aplomb des bords du clavier, vus depuis le tabouret ; haut gauche et haut droit en haut de la zone d'effets. Touches `1`–`4` pour choisir un coin, flèches pour 1 px, Maj + flèches pour 10 px. La carte à côté regroupe les miroirs, la compensation de luminosité, le clavier (61, 76 ou 88 touches, ou « Apprendre ») et les profils. Le bouton ⇄ la passe de l'autre côté.
+- **Visuels** : les options à gauche, et à droite un faux piano d'une octave qui joue en boucle pour voir chaque changement en direct.
+- **Entrée MIDI** : choix du piano, démo, clavier virtuel et raccourcis.
 
-Les réglages sont enregistrés dans le navigateur. Chaque lieu peut avoir son profil (« Nouveau profil »), et « Exporter » / « Importer » sauvegardent tout en JSON. Le panneau propose aussi miroir horizontal et vertical, et une compensation de luminosité gauche ↔ droite pour un projecteur en biais.
+Les réglages sont enregistrés dans le navigateur. Chaque lieu peut avoir son profil, et « Exporter » / « Importer » sauvegardent tout en JSON.
 
 ## Architecture
 
 ```
 src/
   core/events.ts           Format d'événement de note commun + décodage MIDI
-  core/keyboardModel.ts    Géométrie réaliste du clavier (61/76/88) + corrections interpolées
-  midi/                    Sources : Web MIDI, clavier virtuel, démo
+  core/keyboardModel.ts    Géométrie réaliste du clavier (61/76/88)
+  midi/                    Sources : Web MIDI, clavier virtuel, démo, boucle d'aperçu
   visuals/                 Rendu PixiJS (WebGL) : barres montantes, lueur, particules, mire
-  calibration/             Homographie 4 coins, transformation CSS matrix3d, écran de calibrage
+  calibration/             Homographie 4 coins, transformation CSS matrix3d, poignées des coins
   config/settings.ts       Réglages, profils, sauvegarde et import
-  ui/                      Panneau de réglages et styles
+  ui/                      Écran de réglage en onglets et styles
 ```
 
 Les modes visuels dessinent à plat dans un « repère piano » (x de 0 à 1 sur la largeur du clavier, effets qui montent depuis le bas). Le calibrage applique ensuite une seule homographie à toute l'image, via une transformation CSS `matrix3d` composée par le GPU. Changer de projecteur ou de lieu ne touche donc jamais aux visuels.

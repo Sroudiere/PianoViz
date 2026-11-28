@@ -32,7 +32,7 @@ export class KeyGlow implements VisualMode {
   update(dt: number, ctx: FrameContext): void {
     const { width: W, height: H, model, sustain } = ctx;
     this.g.clear();
-    const layers = 12;
+    const layers = 32;
     for (const [note, glow] of this.glows) {
       if (glow.held) glow.level += (glow.target - glow.level) * Math.min(1, dt * 30);
       else glow.level -= dt * (sustain ? 0.6 : 2.5);
@@ -47,7 +47,7 @@ export class KeyGlow implements VisualMode {
       for (let i = 0; i < layers; i++) {
         // Couches empilées de plus en plus hautes : dégradé doux du bas vers le haut.
         const h = H * 0.3 * ((i + 1) / layers) ** 2;
-        this.g.rect(x, H - h, w, h).fill({ color: glow.color, alpha: glow.level * 0.09 });
+        this.g.rect(x, H - h, w, h).fill({ color: glow.color, alpha: glow.level * 0.035 });
       }
     }
   }

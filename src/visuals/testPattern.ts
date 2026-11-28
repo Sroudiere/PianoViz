@@ -3,8 +3,7 @@ import { noteNameFr, type KeyboardModel } from '../core/keyboardModel';
 
 /**
  * Mire de calibrage, dessinée dans le repère piano : cadre de la zone, croix au centre,
- * grille des touches au bas de la zone avec le nom des Do, touche jouée en surbrillance
- * et points de correction.
+ * grille des touches au bas de la zone avec le nom des Do, et touche jouée en surbrillance.
  */
 export class TestPattern {
   readonly container = new Container();
@@ -21,7 +20,7 @@ export class TestPattern {
     this.highlighted = note;
   }
 
-  draw(W: number, H: number, model: KeyboardModel, correctedNotes: number[]): void {
+  draw(W: number, H: number, model: KeyboardModel): void {
     const g = this.g;
     g.clear();
     for (const child of this.labels.removeChildren()) child.destroy();
@@ -54,10 +53,6 @@ export class TestPattern {
     if (this.highlighted !== null) {
       const k = model.key(this.highlighted);
       if (k) g.rect(k.x0 * W, 0, (k.x1 - k.x0) * W, H - keyH).fill({ color: 0xffd24a, alpha: 0.25 });
-    }
-    for (const note of correctedNotes) {
-      const k = model.key(note);
-      if (k) g.circle(k.cx * W, H - keyH - 14, 6).fill({ color: 0x4ade80 });
     }
 
     const fontSize = Math.max(10, Math.min(18, model.whiteWidth * W * 0.55));

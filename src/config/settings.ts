@@ -1,4 +1,3 @@
-import type { KeyCorrection } from '../core/keyboardModel';
 import type { Point, Quad } from '../calibration/homography';
 
 export type ColorMode = 'hands' | 'pitch' | 'octave' | 'velocity' | 'single';
@@ -30,7 +29,6 @@ export interface CalibrationProfile {
   corners: Quad;
   mirrorX: boolean;
   mirrorY: boolean;
-  corrections: KeyCorrection[];
   /** Compensation de luminosité gauche → droite : -1 assombrit la gauche, +1 la droite. */
   brightnessTilt: number;
 }
@@ -58,7 +56,6 @@ export const defaultProfile = (name = 'Par défaut'): CalibrationProfile => ({
   corners: defaultCorners(),
   mirrorX: false,
   mirrorY: false,
-  corrections: [],
   brightnessTilt: 0,
 });
 
@@ -100,7 +97,15 @@ export function sanitize(input: unknown): Settings {
   };
   for (const [name, p] of Object.entries(s.profiles ?? {})) {
     if (!p || !Array.isArray(p.corners) || p.corners.length !== 4 || !p.corners.every(isPoint)) continue;
-    out.profiles[name] = { ...defaultProfile(name), ...p, name };
+    const d0 = defaultProfile(name);
+    // On ne garde que les champs connus (les anciennes corrections de touches sont ignorées).
+    out.profiles[name] = {
+      name,
+      corners: p.corners,
+      mirrorX: typeof p.mirrorX === 'boolean' ? p.mirrorX : d0.mirrorX,
+      mirrorY: typeof p.mirrorY === 'boolean' ? p.mirrorY : d0.mirrorY,
+      brightnessTilt: Number.isFinite(p.brightnessTilt) ? p.brightnessTilt : d0.brightnessTilt,
+    };
   }
   if (Object.keys(out.profiles).length === 0) out.profiles = d.profiles;
   if (!out.profiles[out.activeProfile]) out.activeProfile = Object.keys(out.profiles)[0];

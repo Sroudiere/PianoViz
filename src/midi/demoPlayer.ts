@@ -59,3 +59,72 @@ export class DemoPlayer {
     this.bus.emit({ type: 'noteoff', note, time: performance.now(), source: 'démo' });
   }
 }
+
+/** Une étape de la boucle d'aperçu : notes jouées ensemble, durée tenue (ms), vélocité. */
+type Step = [notes: number[], ms: number, velocity: number];
+
+/**
+ * Boucle sans fin sur une octave (Do3 – Do4), pour l'aperçu de l'onglet Visuels :
+ * accords tenus, traits rapides et nuances variées, pour montrer chaque réglage.
+ */
+const OCTAVE_LOOP: Step[] = [
+  [[60, 64, 67], 900, 0.85],
+  [[72], 180, 0.5],
+  [[71], 180, 0.6],
+  [[67], 180, 0.45],
+  [[64], 420, 0.75],
+  [[65, 69], 650, 0.6],
+  [[62], 160, 0.95],
+  [[64], 160, 0.5],
+  [[65], 160, 0.65],
+  [[67, 71], 800, 0.8],
+  [[69], 130, 1],
+  [[67], 130, 0.55],
+  [[66], 130, 0.4],
+  [[64], 130, 0.6],
+  [[63], 130, 0.5],
+  [[62], 320, 0.7],
+  [[61, 68], 500, 0.6],
+  [[60, 64, 67, 72], 1300, 1],
+];
+
+export class PreviewLoop {
+  private timer: number | null = null;
+  private index = 0;
+  private offTimers = new Set<number>();
+  private active = new Set<number>();
+
+  constructor(private bus: NoteBus) {}
+
+  start(): void {
+    if (this.timer !== null) return;
+    this.next();
+  }
+
+  stop(): void {
+    if (this.timer !== null) window.clearTimeout(this.timer);
+    this.timer = null;
+    for (const t of this.offTimers) window.clearTimeout(t);
+    this.offTimers.clear();
+    for (const n of this.active) this.bus.emit({ type: 'noteoff', note: n, time: performance.now(), source: 'aperçu' });
+    this.active.clear();
+  }
+
+  private next(): void {
+    const [notes, ms, velocity] = OCTAVE_LOOP[this.index];
+    this.index = (this.index + 1) % OCTAVE_LOOP.length;
+    for (const note of notes) {
+      if (this.active.has(note)) this.bus.emit({ type: 'noteoff', note, time: performance.now(), source: 'aperçu' });
+      this.active.add(note);
+      this.bus.emit({ type: 'noteon', note, velocity, time: performance.now(), source: 'aperçu' });
+      const t = window.setTimeout(() => {
+        this.offTimers.delete(t);
+        if (!this.active.delete(note)) return;
+        this.bus.emit({ type: 'noteoff', note, time: performance.now(), source: 'aperçu' });
+      }, ms * 0.9);
+      this.offTimers.add(t);
+    }
+    const pause = this.index === 0 ? 700 : 40;
+    this.timer = window.setTimeout(() => this.next(), ms + pause);
+  }
+}

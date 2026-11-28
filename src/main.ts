@@ -2,12 +2,12 @@ import { NoteBus } from './core/events';
 import { KeyboardModel, noteNameFr } from './core/keyboardModel';
 import { activeProfile, defaultCorners, loadSettings, sanitize, saveSettings, type Settings } from './config/settings';
 import { applyStageTransform } from './calibration/stageTransform';
-import { CalibrationOverlay } from './calibration/calibrationOverlay';
+import { CornerEditor } from './calibration/cornerEditor';
 import { MidiInput } from './midi/midiInput';
 import { VirtualKeyboard } from './midi/virtualKeyboard';
-import { DemoPlayer } from './midi/demoPlayer';
+import { DemoPlayer, PreviewLoop } from './midi/demoPlayer';
 import { Renderer } from './visuals/renderer';
-import { Panel } from './ui/panel';
+import { SetupScreen } from './ui/setup';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -15,11 +15,8 @@ async function main(): Promise<void> {
   let settings: Settings = loadSettings();
   const bus = new NoteBus();
 
-  const buildModel = () =>
-    new KeyboardModel(settings.keyboard.lowest, settings.keyboard.highest, activeProfile(settings).corrections);
-  let model = buildModel();
-
-  const renderer = new Renderer(model, settings.visual);
+  const buildModel = () => new KeyboardModel(settings.keyboard.lowest, settings.keyboard.highest);
+  const renderer = new Renderer(buildModel(), settings.visual);
   await renderer.init($('canvas-host'), bus);
 
   const stage = $('stage');
@@ -34,98 +31,59 @@ async function main(): Promise<void> {
     saveTimer = window.setTimeout(() => saveSettings(settings), 300);
   };
 
-  const rebuildModel = () => {
-    model = buildModel();
-    renderer.setModel(model, activeProfile(settings).corrections.map((c) => c.note));
-  };
-
   // --- Sources de notes ---
   const midi = new MidiInput(bus);
   new VirtualKeyboard(bus);
   const demo = new DemoPlayer(bus);
 
-  // --- Calibrage ---
-  let lastNote: number | null = null;
-  const overlay = new CalibrationOverlay($('calibration-overlay'), () => activeProfile(settings), {
-    changed: () => {
-      applyTransform();
+  // --- Aperçu de l'onglet Visuels : un faux piano d'une octave, avec sa propre boucle de notes ---
+  const previewBus = new NoteBus();
+  const preview = new Renderer(new KeyboardModel(60, 72), settings.visual, { pianoHeight: 0.26 });
+  const previewLoop = new PreviewLoop(previewBus);
+  let previewReady: Promise<void> | null = null;
+  const setPreview = async (on: boolean) => {
+    if (on) {
+      previewReady ??= preview.init(setup.previewHost, previewBus);
+      await previewReady;
+      preview.setRunning(true);
+      previewLoop.start();
+    } else if (previewReady) {
+      previewLoop.stop();
+      preview.setRunning(false);
+    }
+  };
+
+  // --- Écran de réglage (F2) ---
+  let learning: number[] | null = null;
+  let patternBeforeSetup = false;
+  const setup: SetupScreen = new SetupScreen(() => settings, {
+    settingsChanged: (kind) => {
+      if (kind === 'keyboard') renderer.setModel(buildModel());
+      if (kind === 'profile') applyTransform();
+      if (kind === 'visual') {
+        renderer.setSettings(settings.visual);
+        preview.setSettings(settings.visual);
+      }
+      if (kind === 'midi') midi.select(settings.midiInputId);
+      corners.render();
       save();
     },
-    nudgeKey: (delta) => {
-      if (lastNote === null) return;
-      const prof = activeProfile(settings);
-      const existing = prof.corrections.find((c) => c.note === lastNote);
-      // Point de départ = correction déjà interpolée à cet endroit, pour ne pas faire sauter la touche.
-      const start = existing?.dx ?? model.correctionAt(model.key(lastNote)?.cx ?? 0);
-      if (existing) existing.dx = start + delta;
-      else prof.corrections.push({ note: lastNote, dx: start + delta });
-      rebuildModel();
-      updateKeyInfo();
-      save();
+    tabChanged: (tab) => {
+      corners.setActive(tab === 'position');
+      renderer.showPattern(tab === 'position' ? true : patternBeforeSetup);
+      if (tab !== 'position') renderer.highlight(null);
+      void setPreview(tab === 'visuels');
     },
-    removeKey: () => {
-      if (lastNote === null) return;
-      const prof = activeProfile(settings);
-      prof.corrections = prof.corrections.filter((c) => c.note !== lastNote);
-      rebuildModel();
-      updateKeyInfo();
-      save();
+    startLearn: () => {
+      learning = [];
+      setup.setLearning('Joue la plus grave…');
     },
     resetCorners: () => {
       activeProfile(settings).corners = defaultCorners();
       applyTransform();
-      overlay.render();
+      corners.render();
       save();
     },
-    stepChanged: (step) => {
-      if (step === 'keys') return;
-      panel.toggle(true);
-      panel.focusSection(step === 'keyboard' ? 'clavier' : 'calibrage');
-    },
-    togglePanel: () => panel.toggle(),
-    exit: () => closeCalibration(),
-  });
-
-  const updateKeyInfo = () => {
-    if (lastNote === null) return;
-    const corr = activeProfile(settings).corrections.find((c) => c.note === lastNote);
-    overlay.setKeyInfo(
-      `<b>${noteNameFr(lastNote)}</b> (MIDI ${lastNote}) : ${corr ? `correction ${corr.dx.toFixed(2)} touche blanche` : 'pas de correction ici'}.
-       <kbd>←</kbd> <kbd>→</kbd> pour décaler, <kbd>Maj</kbd> pour aller plus vite, <kbd>Suppr</kbd> pour retirer.`,
-    );
-  };
-
-  let patternBeforeCalib = false;
-  const openCalibration = () => {
-    if (overlay.active) return;
-    patternBeforeCalib = renderer.patternVisible;
-    renderer.showPattern(true);
-    overlay.open();
-  };
-  const closeCalibration = () => {
-    overlay.close();
-    panel.toggle(false);
-    renderer.showPattern(patternBeforeCalib);
-    renderer.highlight(null);
-  };
-
-  // --- Apprendre la plage ---
-  let learning: number[] | null = null;
-
-  // --- Panneau ---
-  const panel = new Panel(() => settings, {
-    settingsChanged: (kind) => {
-      if (kind === 'keyboard' || kind === 'profile') rebuildModel();
-      if (kind === 'profile') applyTransform();
-      if (kind === 'visual') renderer.setSettings(settings.visual);
-      if (kind === 'midi') midi.select(settings.midiInputId);
-      save();
-    },
-    startLearn: () => {
-      learning = [];
-      panel.setLearning('Joue la touche la plus grave…');
-    },
-    openCalibration,
     togglePattern: () => renderer.showPattern(!renderer.patternVisible),
     toggleDemo: () => {
       if (demo.running) demo.stop();
@@ -144,11 +102,13 @@ async function main(): Promise<void> {
     importSettings: async (file) => {
       try {
         settings = sanitize(JSON.parse(await file.text()));
-        rebuildModel();
-        applyTransform();
+        renderer.setModel(buildModel());
         renderer.setSettings(settings.visual);
+        preview.setSettings(settings.visual);
+        applyTransform();
         midi.select(settings.midiInputId);
-        panel.refresh();
+        setup.refresh();
+        corners.render();
         saveSettings(settings);
         hint('Réglages importés');
       } catch {
@@ -157,34 +117,47 @@ async function main(): Promise<void> {
     },
   });
 
-  midi.onStatus((st) => panel.setMidiStatus(st));
+  const corners = new CornerEditor(setup.cornerLayer, () => activeProfile(settings), () => {
+    applyTransform();
+    save();
+  });
+  corners.onSelect = (i) => setup.setSelectedCorner(i);
+
+  const openSetup = () => {
+    if (setup.isOpen) return;
+    patternBeforeSetup = renderer.patternVisible;
+    setup.open('position');
+  };
+  const closeSetup = () => {
+    if (!setup.isOpen) return;
+    setup.close();
+  };
+
+  midi.onStatus((st) => setup.setMidiStatus(st));
   void midi.start(settings.midiInputId);
 
   renderer.onNote = (e) => {
     if (e.type !== 'noteon') return;
-    panel.setActivity(`${noteNameFr(e.note)} (MIDI ${e.note}) · vélocité ${Math.round(e.velocity * 127)} · ${e.source}`);
+    setup.setActivity(`${noteNameFr(e.note)} (MIDI ${e.note}) · vélocité ${Math.round(e.velocity * 127)} · ${e.source}`);
     if (learning) {
       learning.push(e.note);
-      if (learning.length === 1) panel.setLearning('Joue maintenant la touche la plus aiguë…');
+      if (learning.length === 1) setup.setLearning('Joue la plus aiguë…');
       else {
         const lo = Math.min(...learning);
         const hi = Math.max(...learning);
         learning = null;
-        panel.setLearning(null);
+        setup.setLearning(null);
         if (hi > lo) {
           Object.assign(settings.keyboard, { lowest: lo, highest: hi });
-          rebuildModel();
-          panel.refresh();
+          renderer.setModel(buildModel());
+          setup.refresh();
           save();
           hint(`Clavier : ${noteNameFr(lo)} – ${noteNameFr(hi)}, ${hi - lo + 1} touches`);
         }
       }
     }
-    if (overlay.active) {
-      lastNote = e.note;
-      renderer.highlight(e.note);
-      updateKeyInfo();
-    }
+    // Sur la mire du positionnement, la touche jouée s'allume : pratique pour vérifier l'alignement.
+    if (setup.isOpen && setup.currentTab === 'position') renderer.highlight(e.note);
   };
 
   // --- Raccourcis ---
@@ -193,36 +166,34 @@ async function main(): Promise<void> {
     else void document.documentElement.requestFullscreen();
   }
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab') {
+    if (e.key === 'F2') {
       e.preventDefault();
-      panel.toggle();
-    } else if (e.key === 'F2') {
+      if (setup.isOpen) closeSetup();
+      else openSetup();
+    } else if (e.key === 'Escape' && setup.isOpen) {
       e.preventDefault();
-      if (overlay.active) closeCalibration();
-      else openCalibration();
+      closeSetup();
     } else if (e.key === 'F3') {
       e.preventDefault();
       renderer.showPattern(!renderer.patternVisible);
     } else if (e.key === 'F4') {
       e.preventDefault();
-      if (demo.running) demo.stop();
-      else demo.start();
-      panel.setDemo(demo.running);
+      setup.setDemo(demo.running ? (demo.stop(), false) : (demo.start(), true));
     } else if (e.key === 'F8') {
       e.preventDefault();
       toggleFullscreen();
     }
   });
 
-  // Le curseur disparaît après 2 s d'immobilité, pour ne pas le projeter sur le mur.
+  // Le curseur disparaît après 2 s d'immobilité hors réglages, pour ne pas le projeter sur le mur.
   let cursorTimer = 0;
   window.addEventListener('pointermove', () => {
     document.body.classList.remove('hide-cursor');
     window.clearTimeout(cursorTimer);
-    cursorTimer = window.setTimeout(() => document.body.classList.add('hide-cursor'), 2000);
+    cursorTimer = window.setTimeout(() => !setup.isOpen && document.body.classList.add('hide-cursor'), 2000);
   });
 
-  hint('Tab : réglages · F2 : calibrage · F4 : démo', 6000);
+  hint('F2 : réglages · F4 : démo', 6000);
 }
 
 let hintTimer = 0;

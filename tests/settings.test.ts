@@ -18,11 +18,11 @@ describe('réglages', () => {
       { x: 0.95, y: 0.9 },
       { x: 0.05, y: 0.8 },
     ];
-    const s = sanitize({ ...d, activeProfile: 'Salon', profiles: { Salon: { corners, mirrorX: true } } });
+    const s = sanitize({ ...d, activeProfile: 'Salon', profiles: { Salon: { corners, mirrorX: true, corrections: [{ note: 60, dx: 1 }] } } });
     expect(s.activeProfile).toBe('Salon');
     expect(s.profiles.Salon.corners).toEqual(corners);
     expect(s.profiles.Salon.mirrorX).toBe(true);
-    expect(s.profiles.Salon.corrections).toEqual([]);
+    expect(s.profiles.Salon).not.toHaveProperty('corrections');
   });
 });
 

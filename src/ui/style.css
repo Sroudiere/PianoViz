@@ -20,63 +20,62 @@ body.hide-cursor, body.hide-cursor * { cursor: none !important; }
 }
 #hint.show { opacity: 1; }
 
-/* Panneau de réglages */
-#panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); overflow-y: auto;
-  background: rgba(16, 16, 20, 0.94); border-left: 1px solid #333; padding: 16px 18px 40px; font-size: 14px;
+/* Écran de réglage (F2) */
+#setup { position: fixed; inset: 0; font-size: 14px; pointer-events: none; }
+#setup[hidden], #setup [hidden] { display: none !important; }
+#setup .tabs {
+  position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 6px; align-items: center;
+  padding: 10px 14px; background: rgba(12, 12, 16, 0.92); border-bottom: 1px solid #333; pointer-events: auto; z-index: 1;
 }
-body.panel-left #panel { right: auto; left: 0; border-left: 0; border-right: 1px solid #333; }
-#panel header { display: flex; align-items: center; gap: 6px; }
-#panel header h1 { flex: 1; }
-#panel button.side { padding: 2px 10px; }
-#panel section { border-radius: 8px; padding: 0 6px; margin: 0 -6px; transition: background 0.6s; }
-#panel section.flash { animation: flash 1.6s ease-out; }
-@keyframes flash { from { background: rgba(255, 210, 74, 0.22); } to { background: transparent; } }
-#panel h1 { font-size: 18px; margin: 0 0 8px; }
-#panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #9aa; margin: 20px 0 8px; }
-#panel .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0; }
-#panel .row .label { flex: 1; }
-#panel input[type='number'] { width: 80px; }
-#panel select, #panel input, #panel button { font: inherit; color: inherit; background: #23232a; border: 1px solid #444; border-radius: 6px; padding: 4px 8px; }
-#panel input[type='color'] { padding: 0; width: 44px; height: 28px; }
-#panel input[type='checkbox'] { width: 18px; height: 18px; }
-#panel .slider { display: flex; align-items: center; gap: 6px; }
-#panel .slider output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: #aaa; }
-#panel .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-#panel button { cursor: pointer; }
-#panel button:hover { background: #2f2f38; }
-#panel button.primary, .calib-toolbar button.primary { background: #2563eb; border-color: #2563eb; }
-#panel button.active { background: #b45309; border-color: #b45309; }
-#panel .hint { color: #999; font-size: 12.5px; }
-#panel .status { padding: 6px 8px; border-radius: 6px; background: #23232a; }
-#panel .status.ok { background: #14532d; }
-#panel .status.bad { background: #7f1d1d; }
-#panel .activity { font-variant-numeric: tabular-nums; color: #ccc; }
+#setup .tabs .spacer { flex: 1; }
+#setup .tabs button { font-size: 15px; padding: 7px 16px; }
+#setup .tabs button.active { background: #ffd24a; color: #000; border-color: #ffd24a; }
+#setup .pane { position: absolute; inset: 0; padding-top: 56px; }
+#setup .pane-visuels, #setup .pane-entree { background: #0b0b0e; pointer-events: auto; }
+#setup h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #9aa; margin: 18px 0 8px; }
+#setup .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0; }
+#setup .row .label { flex: 1; }
+#setup input[type='number'] { width: 80px; }
+#setup select, #setup input, #setup button { font: inherit; color: #eee; background: #23232a; border: 1px solid #444; border-radius: 6px; padding: 4px 8px; }
+#setup input[type='color'] { padding: 0; width: 44px; height: 28px; }
+#setup input[type='checkbox'] { width: 18px; height: 18px; }
+#setup .slider { display: flex; align-items: center; gap: 6px; }
+#setup .slider output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: #aaa; }
+#setup .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+#setup button { cursor: pointer; }
+#setup button:hover { background: #2f2f38; }
+#setup button.primary { background: #2563eb; border-color: #2563eb; }
+#setup button.active { background: #b45309; border-color: #b45309; }
+#setup .hint { color: #999; font-size: 12.5px; line-height: 1.5; }
+#setup .status { padding: 6px 8px; border-radius: 6px; background: #23232a; }
+#setup .status.ok { background: #14532d; }
+#setup .status.bad { background: #7f1d1d; }
+#setup .activity { font-variant-numeric: tabular-nums; color: #ccc; }
+kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 5px; font-size: 12px; color: #eee; }
 
-/* Calibrage */
-#calibration-overlay { position: fixed; inset: 0; pointer-events: none; }
-#calibration-overlay[hidden] { display: none; }
+/* Onglet Positionnement : poignées sur l'image projetée + carte d'options */
+.corner-layer { position: absolute; inset: 0; }
 .calib-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .calib-svg polygon { fill: none; stroke: #ffd24a; stroke-width: 2; stroke-dasharray: 8 6; }
 .calib-handle {
   position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%;
   background: rgba(255, 210, 74, 0.25); border: 2px solid #ffd24a; color: #ffd24a;
-  display: grid; place-items: center; font-weight: 700; cursor: grab; pointer-events: auto; touch-action: none;
+  display: grid; place-items: center; font-weight: 700; cursor: grab; pointer-events: auto; touch-action: none; z-index: 2;
 }
 .calib-handle.selected { background: #ffd24a; color: #000; }
-.calib-handle[hidden] { display: none; }
-/* Barre et aide du calibrage, recentrées dans l'espace laissé libre par le panneau. */
-.calib-top {
-  position: absolute; top: 16px; left: 50%; transform: translateX(-50%); width: min(760px, 92vw);
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
+#setup .card {
+  position: absolute; top: 72px; right: 16px; width: min(380px, 92vw); max-height: calc(100vh - 88px); overflow-y: auto;
+  background: rgba(16, 16, 20, 0.94); border: 1px solid #3a3a44; border-radius: 10px; padding: 4px 16px 12px; pointer-events: auto;
 }
-body.panel-open .calib-top { left: calc(50% - min(210px, 50vw)); width: min(760px, calc(100vw - 460px)); }
-body.panel-open.panel-left .calib-top { left: calc(50% + min(210px, 50vw)); }
-.calib-toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; pointer-events: auto; }
-.calib-toolbar button[hidden] { display: none; }
-.calib-toolbar button { font: inherit; font-size: 14px; color: #fff; background: #23232a; border: 1px solid #555; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
-.calib-toolbar button.active { background: #ffd24a; color: #000; border-color: #ffd24a; }
-.calib-info {
-  background: rgba(16, 16, 20, 0.9); border: 1px solid #444; border-radius: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.5;
-}
-kbd { background: #333; border: 1px solid #555; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+#setup .card.left { right: auto; left: 16px; }
+#setup .card header { display: flex; align-items: center; justify-content: space-between; }
+#setup .card header h2 { margin-top: 14px; }
+#setup button.icon { padding: 2px 10px; }
+
+/* Onglet Visuels : options à gauche, aperçu à droite */
+#setup .pane-visuels { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; }
+#setup .options { overflow-y: auto; padding: 0 22px 24px; border-right: 1px solid #262630; }
+#setup .pane-entree .options { max-width: 560px; border-right: 0; }
+#setup .preview { display: flex; flex-direction: column; padding: 18px 22px 14px; min-width: 0; }
+#setup .preview-host { flex: 1; min-height: 200px; border-radius: 10px; overflow: hidden; border: 1px solid #262630; background: #000; }
+#setup .preview .hint { margin: 8px 0 0; }
