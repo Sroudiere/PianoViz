@@ -1,27 +1,5 @@
 import type { Point, Quad } from '../calibration/homography';
-
-export type ColorMode = 'hands' | 'pitch' | 'octave' | 'velocity' | 'single';
-export type VisualModeId = 'bars' | 'glow' | 'particles';
-
-export interface VisualSettings {
-  /** Modes actifs, dessinés dans cet ordre (le premier est au fond). */
-  modes: VisualModeId[];
-  colorMode: ColorMode;
-  /** Couleurs « main gauche » et « main droite » (hex). */
-  leftColor: string;
-  rightColor: string;
-  singleColor: string;
-  /** Note de séparation des mains : en dessous = main gauche. */
-  splitNote: number;
-  /** Vitesse de montée des barres, en hauteurs de zone par seconde. */
-  riseSpeed: number;
-  /** Halo lumineux autour des barres (coûteux sur Raspberry Pi). */
-  halo: boolean;
-  /** Effet de la vélocité sur la luminosité : 0 = aucun, 1 = maximal. */
-  velocityAmount: number;
-  /** Nombre maximal de particules vivantes. */
-  maxParticles: number;
-}
+import { defaultStyle, sanitizeStyle, type VisualStyle } from '../style/style';
 
 export interface CalibrationProfile {
   name: string;
@@ -37,7 +15,11 @@ export interface Settings {
   version: 1;
   keyboard: { lowest: number; highest: number; widthCm: number };
   midiInputId: string | null;
-  visual: VisualSettings;
+  /** Style visuel courant, édité dans l'onglet Visuels. */
+  style: VisualStyle;
+  /** Préréglages enregistrés par l'utilisateur. */
+  userPresets: VisualStyle[];
+  performance: { maxParticles: number };
   activeProfile: string;
   profiles: Record<string, CalibrationProfile>;
 }
@@ -63,18 +45,9 @@ export const defaultSettings = (): Settings => ({
   version: 1,
   keyboard: { lowest: 21, highest: 108, widthCm: 122 },
   midiInputId: null,
-  visual: {
-    modes: ['glow', 'bars'],
-    colorMode: 'hands',
-    leftColor: '#3fd0ff',
-    rightColor: '#ff7a3d',
-    singleColor: '#9be564',
-    splitNote: 60,
-    riseSpeed: 0.35,
-    halo: true,
-    velocityAmount: 0.6,
-    maxParticles: 1500,
-  },
+  style: defaultStyle(),
+  userPresets: [],
+  performance: { maxParticles: 2500 },
   activeProfile: 'Par défaut',
   profiles: { 'Par défaut': defaultProfile() },
 });
@@ -91,7 +64,11 @@ export function sanitize(input: unknown): Settings {
     ...d,
     keyboard: { ...d.keyboard, ...(s.keyboard ?? {}) },
     midiInputId: typeof s.midiInputId === 'string' ? s.midiInputId : null,
-    visual: { ...d.visual, ...(s.visual ?? {}) },
+    style: sanitizeStyle(s.style),
+    userPresets: Array.isArray(s.userPresets) ? s.userPresets.map(sanitizeStyle) : [],
+    performance: {
+      maxParticles: Number.isFinite(s.performance?.maxParticles) ? Math.max(100, Math.min(8000, s.performance!.maxParticles)) : d.performance.maxParticles,
+    },
     activeProfile: typeof s.activeProfile === 'string' ? s.activeProfile : d.activeProfile,
     profiles: {},
   };

@@ -16,7 +16,8 @@ async function main(): Promise<void> {
   const bus = new NoteBus();
 
   const buildModel = () => new KeyboardModel(settings.keyboard.lowest, settings.keyboard.highest);
-  const renderer = new Renderer(buildModel(), settings.visual);
+  const renderer = new Renderer(buildModel(), settings.style);
+  renderer.maxParticles = settings.performance.maxParticles;
   await renderer.init($('canvas-host'), bus);
 
   const stage = $('stage');
@@ -36,17 +37,33 @@ async function main(): Promise<void> {
   new VirtualKeyboard(bus);
   const demo = new DemoPlayer(bus);
 
-  // --- Aperçu de l'onglet Visuels : un faux piano d'une octave, avec sa propre boucle de notes ---
+  // --- Aperçu de l'onglet Visuels : faux piano d'une octave en boucle, ou une note seule immobile ---
   const previewBus = new NoteBus();
-  const preview = new Renderer(new KeyboardModel(60, 72), settings.visual, { pianoHeight: 0.26 });
+  const LOOP_RANGE: [number, number] = [60, 72];
+  const SINGLE_RANGE: [number, number] = [60, 67];
+  const SINGLE_NOTE = 64;
+  const preview = new Renderer(new KeyboardModel(...LOOP_RANGE), settings.style, { pianoHeight: 0.22 });
   const previewLoop = new PreviewLoop(previewBus);
   let previewReady: Promise<void> | null = null;
+  let previewOn = false;
+  const applyPreviewMode = () => {
+    const single = setup.editor.mode === 'single';
+    previewLoop.stop();
+    preview.setModel(new KeyboardModel(...(single ? SINGLE_RANGE : LOOP_RANGE)));
+    preview.setStatic(single ? SINGLE_NOTE : null);
+    if (!single && previewOn) previewLoop.start();
+  };
   const setPreview = async (on: boolean) => {
+    previewOn = on;
     if (on) {
-      previewReady ??= preview.init(setup.previewHost, previewBus);
+      if (!previewReady) {
+        previewReady = preview.init(setup.editor.previewHost, previewBus);
+        setup.editor.attach(preview);
+      }
       await previewReady;
+      preview.maxParticles = settings.performance.maxParticles;
       preview.setRunning(true);
-      previewLoop.start();
+      applyPreviewMode();
     } else if (previewReady) {
       previewLoop.stop();
       preview.setRunning(false);
@@ -61,12 +78,16 @@ async function main(): Promise<void> {
       if (kind === 'keyboard') renderer.setModel(buildModel());
       if (kind === 'profile') applyTransform();
       if (kind === 'visual') {
-        renderer.setSettings(settings.visual);
-        preview.setSettings(settings.visual);
+        renderer.setStyle(settings.style);
+        preview.setStyle(settings.style);
+        renderer.maxParticles = preview.maxParticles = settings.performance.maxParticles;
       }
       if (kind === 'midi') midi.select(settings.midiInputId);
       corners.render();
       save();
+    },
+    previewModeChanged: () => {
+      if (previewOn) applyPreviewMode();
     },
     tabChanged: (tab) => {
       corners.setActive(tab === 'position');
@@ -103,8 +124,8 @@ async function main(): Promise<void> {
       try {
         settings = sanitize(JSON.parse(await file.text()));
         renderer.setModel(buildModel());
-        renderer.setSettings(settings.visual);
-        preview.setSettings(settings.visual);
+        renderer.setStyle(settings.style);
+        preview.setStyle(settings.style);
         applyTransform();
         midi.select(settings.midiInputId);
         setup.refresh();

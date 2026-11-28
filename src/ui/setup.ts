@@ -1,12 +1,15 @@
 import { PRESETS, noteNameFr } from '../core/keyboardModel';
-import { defaultProfile, type ColorMode, type Settings, type VisualModeId } from '../config/settings';
+import { defaultProfile, type Settings } from '../config/settings';
 import type { MidiStatus } from '../midi/midiInput';
 import { CORNER_NAMES } from '../calibration/cornerEditor';
+import { button, h, opt, row } from './dom';
+import { StyleEditor, type PreviewMode } from './styleEditor';
 
 export type SetupTab = 'position' | 'visuels' | 'entree';
 
 export interface SetupActions {
   settingsChanged(kind: 'keyboard' | 'visual' | 'profile' | 'midi'): void;
+  previewModeChanged(mode: PreviewMode): void;
   tabChanged(tab: SetupTab | null): void;
   startLearn(): void;
   resetCorners(): void;
@@ -17,51 +20,10 @@ export interface SetupActions {
   importSettings(file: File): void;
 }
 
-const MODE_LABELS: Record<VisualModeId, string> = {
-  glow: 'Lueur de touche',
-  bars: 'Barres montantes',
-  particles: 'Particules',
-};
-
-const COLOR_LABELS: Record<ColorMode, string> = {
-  hands: 'Par main',
-  pitch: 'Par note (12 teintes)',
-  octave: 'Par octave',
-  velocity: 'Par vélocité',
-  single: 'Couleur unique',
-};
-
 const TAB_LABELS: Record<SetupTab, string> = {
   position: 'Positionnement',
   visuels: 'Visuels',
   entree: 'Entrée MIDI',
-};
-
-const h = <K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Record<string, unknown> = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] => {
-  const el: HTMLElementTagNameMap[K] = Object.assign(document.createElement(tag), props);
-  el.append(...children);
-  return el;
-};
-
-const opt = (value: string, label: string, selected = false): HTMLOptionElement => {
-  const o = document.createElement('option');
-  o.value = value;
-  o.textContent = label;
-  o.selected = selected;
-  return o;
-};
-
-const row = (label: string, ...controls: (Node | string)[]) =>
-  h('label', { className: 'row' }, h('span', { className: 'label' }, label), ...controls);
-
-const button = (label: string, onClick: () => void, className = '') => {
-  const b = h('button', { type: 'button', className }, label);
-  b.addEventListener('click', onClick);
-  return b;
 };
 
 /**
@@ -74,8 +36,8 @@ export class SetupScreen {
   readonly el = h('div', { id: 'setup', hidden: true });
   /** Calque où le CornerEditor place ses poignées. */
   readonly cornerLayer = h('div', { className: 'corner-layer' });
-  /** Hôte du rendu d'aperçu, dans l'onglet Visuels. */
-  readonly previewHost = h('div', { className: 'preview-host' });
+  /** Éditeur de style de l'onglet Visuels (aperçu, calques, préréglages). */
+  readonly editor: StyleEditor;
 
   private tab: SetupTab = 'position';
   private tabButtons = new Map<SetupTab, HTMLButtonElement>();
@@ -94,6 +56,7 @@ export class SetupScreen {
   private demoBtn = h('button', { type: 'button' }, 'Démo : arrêt');
 
   constructor(private s: () => Settings, private actions: SetupActions) {
+    this.editor = new StyleEditor(s, () => actions.settingsChanged('visual'), (m) => actions.previewModeChanged(m));
     document.body.appendChild(this.el);
     this.build();
     this.refresh();
@@ -177,14 +140,12 @@ export class SetupScreen {
       ...Object.keys(s.profiles).map((name) => opt(name, name, name === s.activeProfile)),
     );
     this.el.querySelectorAll<HTMLInputElement>('[data-bind]').forEach((input) => this.readBinding(input));
-    this.el.querySelectorAll<HTMLInputElement>('[data-mode]').forEach((cb) => {
-      cb.checked = s.visual.modes.includes(cb.dataset.mode as VisualModeId);
-    });
+    this.editor.refresh();
   }
 
   private scopeObject(scope: string): Record<string, unknown> {
     const s = this.s();
-    const obj = scope === 'visual' ? s.visual : scope === 'profile' ? s.profiles[s.activeProfile] : s.keyboard;
+    const obj = scope === 'profile' ? s.profiles[s.activeProfile] : s.keyboard;
     return obj as unknown as Record<string, unknown>;
   }
 
@@ -201,7 +162,7 @@ export class SetupScreen {
     if (out instanceof HTMLOutputElement) out.textContent = input.value;
   }
 
-  /** Champ relié à un réglage `scope.clé` (scope = visual | profile | keyboard), appliqué en direct. */
+  /** Champ relié à un réglage `scope.clé` (scope = profile | keyboard), appliqué en direct. */
   private bound<T extends HTMLInputElement | HTMLSelectElement>(bind: string, el: T): T {
     el.dataset.bind = bind;
     const [scope, key] = bind.split('.');
@@ -211,7 +172,7 @@ export class SetupScreen {
       else if (el instanceof HTMLInputElement && (el.type === 'number' || el.type === 'range')) obj[key] = Number(el.value);
       else obj[key] = el.value;
       if (el instanceof HTMLInputElement && el.type === 'range') this.updateRangeLabel(el);
-      this.actions.settingsChanged(scope === 'profile' ? 'profile' : scope === 'keyboard' ? 'keyboard' : 'visual');
+      this.actions.settingsChanged(scope === 'profile' ? 'profile' : 'keyboard');
     });
     return el;
   }
@@ -231,7 +192,7 @@ export class SetupScreen {
     nav.append(h('span', { className: 'spacer' }), button('Fermer (F2)', () => this.close(), 'primary'));
 
     const position = h('section', { className: 'pane pane-position' }, this.cornerLayer, this.buildPositionCard());
-    const visuels = h('section', { className: 'pane pane-visuels' }, this.buildVisualOptions(), this.buildPreview());
+    const visuels = h('section', { className: 'pane pane-visuels' }, this.editor.el);
     const entree = h('section', { className: 'pane pane-entree' }, this.buildInput());
     this.panes.set('position', position);
     this.panes.set('visuels', visuels);
@@ -311,51 +272,6 @@ export class SetupScreen {
       ),
     );
     return this.card;
-  }
-
-  private buildVisualOptions(): HTMLElement {
-    const a = this.actions;
-    const modeBoxes = (Object.keys(MODE_LABELS) as VisualModeId[]).map((id) => {
-      const cb = h('input', { type: 'checkbox' });
-      cb.dataset.mode = id;
-      cb.addEventListener('input', () => {
-        const order: VisualModeId[] = ['glow', 'bars', 'particles'];
-        const set = new Set(this.s().visual.modes);
-        if (cb.checked) set.add(id);
-        else set.delete(id);
-        this.s().visual.modes = order.filter((m) => set.has(m));
-        a.settingsChanged('visual');
-      });
-      return row(MODE_LABELS[id], cb);
-    });
-    const colorSelect = this.bound('visual.colorMode', h('select'));
-    colorSelect.append(...(Object.keys(COLOR_LABELS) as ColorMode[]).map((c) => opt(c, COLOR_LABELS[c])));
-    return h(
-      'div',
-      { className: 'options' },
-      h('h2', {}, 'Effets'),
-      ...modeBoxes,
-      h('h2', {}, 'Couleurs'),
-      row('Mode de couleur', colorSelect),
-      row('Main gauche', this.bound('visual.leftColor', h('input', { type: 'color' }))),
-      row('Main droite', this.bound('visual.rightColor', h('input', { type: 'color' }))),
-      row('Couleur unique', this.bound('visual.singleColor', h('input', { type: 'color' }))),
-      row('Séparation des mains (MIDI, 60 = Do3)', this.bound('visual.splitNote', h('input', { type: 'number', min: '0', max: '127' }))),
-      h('h2', {}, 'Mouvement et rendu'),
-      row('Vitesse de montée', this.slider('visual.riseSpeed', 0.1, 1.5, 0.05)),
-      row('Effet de la vélocité', this.slider('visual.velocityAmount', 0, 1, 0.05)),
-      row('Halo (plus gourmand)', this.bound('visual.halo', h('input', { type: 'checkbox' }))),
-      row('Particules max', this.slider('visual.maxParticles', 200, 4000, 100)),
-    );
-  }
-
-  private buildPreview(): HTMLElement {
-    return h(
-      'div',
-      { className: 'preview' },
-      this.previewHost,
-      h('p', { className: 'hint' }, 'Aperçu en direct sur une octave (Do3 – Do4) : chaque réglage s\'applique aux notes suivantes.'),
-    );
   }
 
   private buildInput(): HTMLElement {
